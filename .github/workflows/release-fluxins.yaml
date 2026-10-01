@@ -124,7 +124,19 @@ jobs:
         shell: bash
         run: pnpm install --frozen-lockfile --ignore-scripts --filter "fluxer_desktop..."
 
-      - name: Build native modules and Electron app code
+      # Windows must use PowerShell here: in Git Bash the coreutils `link` command shadows
+      # the MSVC linker (link.exe) and every Rust build script fails to link.
+      - name: Build native modules and Electron app code (Windows)
+        if: matrix.platform == 'windows'
+        working-directory: fluxer_desktop
+        shell: pwsh
+        env:
+          NODE_ENV: production
+          FLUXER_DESKTOP_PRODUCTION: 'true'
+        run: pnpm build
+
+      - name: Build native modules and Electron app code (macOS)
+        if: matrix.platform == 'macos'
         working-directory: fluxer_desktop
         shell: bash
         env:
@@ -156,9 +168,16 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: >-
-          pnpm exec electron-builder --config electron-builder.config.cjs
-          --mac --arm64 --config.extraMetadata.version="$VERSION"
+        run: |
+          # A missing secret becomes an empty string, and electron-builder treats an empty
+          # CSC_LINK as a certificate path ("... not a file"). Unset the empty ones.
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [ -z "${!name}" ]; then unset "$name"; fi
+          done
+          if [ -z "${CSC_LINK:-}" ]; then
+            echo "No signing certificate configured: building an ad-hoc signed, unnotarised app."
+          fi
+          pnpm exec electron-builder --config electron-builder.config.cjs             --mac --arm64 --config.extraMetadata.version="$VERSION"
 
       - name: Collect release files (Windows)
         if: matrix.platform == 'windows'
