@@ -35,6 +35,7 @@ interface PersistedDesktopWindowBehaviorSettings {
 	useNativeTitleBar?: boolean;
 	minimizeToTrayV2?: boolean;
 	closeToTrayV2?: boolean;
+	startMinimized?: boolean;
 	rememberWindowState?: boolean;
 	allowTransparency?: boolean;
 	smoothScrolling?: boolean;
@@ -60,6 +61,7 @@ function getDefaultDesktopWindowBehaviorSettings(): DesktopWindowBehaviorSetting
 		showTrayIcon: true,
 		minimizeToTray: false,
 		closeToTray: true,
+		startMinimized: false,
 		useNativeTitleBar: false,
 		activeUseNativeTitleBar: false,
 		rememberWindowState: true,
@@ -100,6 +102,9 @@ function sanitizePersistedDesktopWindowBehaviorSettings(
 	}
 	if (typeof value.middleClickAutoscroll === 'boolean') {
 		settings.middleClickAutoscroll = value.middleClickAutoscroll;
+	}
+	if (typeof value.startMinimized === 'boolean') {
+		settings.startMinimized = value.startMinimized;
 	}
 	const minimizeToTrayV2 = value[MINIMIZE_TO_TRAY_STORAGE_KEY_V2];
 	if (typeof minimizeToTrayV2 === 'boolean') {
@@ -240,6 +245,10 @@ function normalizeDesktopWindowBehaviorSettings(
 				: typeof normalizedSettings?.closeToTrayV2 === 'boolean'
 					? normalizedSettings.closeToTrayV2
 					: defaults.closeToTray,
+		startMinimized:
+			typeof normalizedSettings?.startMinimized === 'boolean'
+				? normalizedSettings.startMinimized
+				: defaults.startMinimized,
 		useNativeTitleBar:
 			typeof normalizedSettings?.useNativeTitleBar === 'boolean'
 				? normalizedSettings.useNativeTitleBar
@@ -288,6 +297,7 @@ function normalizeDesktopWindowBehaviorSettings(
 	if (!normalized.showTrayIcon) {
 		normalized.minimizeToTray = false;
 		normalized.closeToTray = false;
+		normalized.startMinimized = false;
 	}
 	return normalized;
 }
@@ -302,6 +312,7 @@ function serializeDesktopWindowBehaviorSettings(
 		allowTransparency: settings.allowTransparency,
 		smoothScrolling: settings.smoothScrolling,
 		middleClickAutoscroll: settings.middleClickAutoscroll,
+		startMinimized: settings.startMinimized,
 		[MINIMIZE_TO_TRAY_STORAGE_KEY_V2]: settings.minimizeToTray,
 		[CLOSE_TO_TRAY_STORAGE_KEY_V2]: settings.closeToTray,
 	};
