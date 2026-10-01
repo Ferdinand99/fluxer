@@ -124,7 +124,19 @@ jobs:
         shell: bash
         run: pnpm install --frozen-lockfile --ignore-scripts --filter "fluxer_desktop..."
 
-      - name: Build native modules and Electron app code
+      # Windows must use PowerShell here: in Git Bash the coreutils `link` command shadows
+      # the MSVC linker (link.exe) and every Rust build script fails to link.
+      - name: Build native modules and Electron app code (Windows)
+        if: matrix.platform == 'windows'
+        working-directory: fluxer_desktop
+        shell: pwsh
+        env:
+          NODE_ENV: production
+          FLUXER_DESKTOP_PRODUCTION: 'true'
+        run: pnpm build
+
+      - name: Build native modules and Electron app code (macOS)
+        if: matrix.platform == 'macos'
         working-directory: fluxer_desktop
         shell: bash
         env:
