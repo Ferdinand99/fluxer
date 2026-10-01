@@ -49,6 +49,9 @@ const metadataName = isLinuxBuild ? linuxPackageName : packageName;
 const provisioningProfile = isCanary
 	? 'build_resources/profiles/Fluxer_Canary.provisionprofile'
 	: 'build_resources/profiles/Fluxer.provisionprofile';
+// Developer ID signing and notarisation are only used when a signing certificate is provided
+// (CSC_LINK / CSC_NAME / CSC_KEYCHAIN). Otherwise macOS builds are ad-hoc signed.
+const macSigningEnabled = Boolean(process.env.CSC_LINK || process.env.CSC_NAME || process.env.CSC_KEYCHAIN);
 const supportedTargetArchs = ['x64', 'arm64'];
 const supportedMacTargetArchs = [...supportedTargetArchs, 'universal'];
 const electronArch = process.env.ELECTRON_ARCH;
@@ -1605,15 +1608,23 @@ module.exports = {
 		minimumSystemVersion: macOSMinimumSystemVersion,
 		icon: `build_resources/${iconDir}/_compiled/AppIcon.icns`,
 		darkModeSupport: true,
-		notarize: true,
-		sign: {
-			hardenedRuntime: true,
-			provisioningProfile,
-			entitlements: isCanary
-				? 'build_resources/entitlements.mac.canary.plist'
-				: 'build_resources/entitlements.mac.stable.plist',
-			entitlementsInherit: 'build_resources/entitlements.mac.inherit.plist',
-		},
+		notarize: macSigningEnabled,
+		sign: macSigningEnabled
+			? {
+					hardenedRuntime: true,
+					provisioningProfile,
+					entitlements: isCanary
+						? 'build_resources/entitlements.mac.canary.plist'
+						: 'build_resources/entitlements.mac.stable.plist',
+					entitlementsInherit: 'build_resources/entitlements.mac.inherit.plist',
+				}
+			: {
+					// Ad-hoc signature so the app launches on Apple Silicon without a developer certificate.
+					identity: '-',
+					hardenedRuntime: false,
+					entitlements: 'build_resources/entitlements.mac.adhoc.plist',
+					entitlementsInherit: 'build_resources/entitlements.mac.adhoc.plist',
+				},
 		target: [
 			{
 				target: 'dmg',

@@ -1,0 +1,239 @@
+name: release fluxins
+
+# Builds the Fluxins desktop client for Windows (x64) and macOS (Apple Silicon) and
+# publishes them as a GitHub release. Run it by hand (Actions -> release fluxins ->
+# Run workflow) or push a tag such as fluxins-v1.0.0.
+#
+# macOS builds are ad-hoc signed and not notarised unless a signing certificate is
+# provided through the CSC_LINK / CSC_KEY_PASSWORD (and APPLE_*) repository secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example 1.0.0 (the tag becomes fluxins-v<version>).
+        required: true
+        type: string
+      prerelease:
+        description: Mark the release as a pre-release.
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'fluxins-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-fluxins-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: '0'
+  BUILD_CHANNEL: stable
+
+jobs:
+  meta:
+    name: Resolve version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Resolve version
+        id: meta
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            version="${REF_NAME#fluxins-v}"
+          else
+            version="$INPUT_VERSION"
+          fi
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
+            echo "Invalid version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=fluxins-v$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Fluxins (${{ matrix.name }})
+    needs: meta
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            platform: windows
+            runner: windows-latest
+            arch: x64
+            rust_target: x86_64-pc-windows-msvc
+          - name: macOS arm64
+            platform: macos
+            runner: macos-latest
+            arch: arm64
+            rust_target: aarch64-apple-darwin
+    env:
+      ELECTRON_ARCH: ${{ matrix.arch }}
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - name: Enable long paths (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: git config --system core.longpaths true
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+
+      - name: Set up pnpm
+        shell: bash
+        run: |
+          pnpm_version="$(node -p "require('./package.json').packageManager.split('@')[1]")"
+          npm install --global "pnpm@$pnpm_version"
+          pnpm --version
+
+      - name: Install Python setuptools (macOS)
+        if: matrix.platform == 'macos'
+        run: brew install python-setuptools
+
+      - name: Set up MSVC env (Windows)
+        if: matrix.platform == 'windows'
+        uses: TheMrMilchmann/setup-msvc-dev@368ef7d1ee4d1171b31d4a7f67f4d954f903f5a9
+        with:
+          arch: amd64
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: '1.98.1'
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter "fluxer_desktop..."
+
+      - name: Build native modules and Electron app code
+        working-directory: fluxer_desktop
+        shell: bash
+        env:
+          NODE_ENV: production
+          FLUXER_DESKTOP_PRODUCTION: 'true'
+        run: pnpm build
+
+      - name: Typecheck desktop client
+        working-directory: fluxer_desktop
+        shell: bash
+        run: pnpm exec tsc --noEmit
+
+      - name: Package Fluxins (Windows)
+        if: matrix.platform == 'windows'
+        working-directory: fluxer_desktop
+        shell: bash
+        run: >-
+          pnpm exec electron-builder --config electron-builder.config.cjs
+          --win dir --x64 --config.extraMetadata.version="$VERSION"
+
+      - name: Package Fluxins (macOS)
+        if: matrix.platform == 'macos'
+        working-directory: fluxer_desktop
+        shell: bash
+        env:
+          # Only used when the secrets exist; otherwise the build is ad-hoc signed.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: >-
+          pnpm exec electron-builder --config electron-builder.config.cjs
+          --mac --arm64 --config.extraMetadata.version="$VERSION"
+
+      - name: Collect release files (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $unpacked = Join-Path $PWD 'fluxer_desktop/dist-electron/win-unpacked'
+          if (-not (Test-Path (Join-Path $unpacked 'Fluxins.exe'))) {
+            throw "Fluxins.exe not found in $unpacked"
+          }
+          New-Item -ItemType Directory -Force release-files | Out-Null
+          $zip = Join-Path $PWD "release-files/Fluxins-$env:VERSION-win-x64.zip"
+          Compress-Archive -Path (Join-Path $unpacked '*') -DestinationPath $zip -CompressionLevel Optimal
+
+      - name: Collect release files (macOS)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          mkdir -p release-files
+          shopt -s nullglob
+          files=(fluxer_desktop/dist-electron/*.dmg fluxer_desktop/dist-electron/*.zip)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No .dmg or .zip produced by electron-builder" >&2
+            ls -la fluxer_desktop/dist-electron >&2 || true
+            exit 1
+          fi
+          cp "${files[@]}" release-files/
+
+      - name: Create checksums
+        shell: bash
+        run: |
+          cd release-files
+          for f in *; do
+            case "$f" in *.sha256) continue ;; esac
+            if command -v sha256sum >/dev/null 2>&1; then
+              sha256sum "$f" > "$f.sha256"
+            else
+              shasum -a 256 "$f" > "$f.sha256"
+            fi
+          done
+          ls -la
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: fluxins-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-files/*
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [meta, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: fluxins-*
+          path: release-files
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          ls -la release-files
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" release-files/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Fluxins $VERSION" \
+            --generate-notes \
+            "${flags[@]}"
