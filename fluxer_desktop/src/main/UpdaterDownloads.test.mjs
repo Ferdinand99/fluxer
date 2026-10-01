@@ -26,7 +26,8 @@ const TAR_GZ_SHA256 = 'c'.repeat(64);
 function loadUpdaterDownloads({channel = 'stable', platform = 'linux', arch = 'x64'} = {}) {
 	function requireStub(specifier) {
 		if (specifier === '@electron/common/BuildChannel') return {BUILD_CHANNEL: channel};
-		if (specifier === '@electron/common/Constants') return {PROJECT_REPOSITORY_URL: 'https://github.com/Ferdinand99/fluxer'};
+		if (specifier === '@electron/common/Constants')
+			return {PROJECT_REPOSITORY_URL: 'https://github.com/Ferdinand99/fluxer'};
 		throw new Error(`Unexpected import: ${specifier}`);
 	}
 
@@ -200,7 +201,13 @@ describe('UpdaterDownloads manual download url', () => {
 		const stable = loadUpdaterDownloads({channel: 'stable', platform: 'darwin'});
 		const canary = loadUpdaterDownloads({channel: 'canary', platform: 'win32'});
 
-		assert.equal(stable.getManualDownloadUrl(latestInfo('2026.910.101500')), 'https://github.com/Ferdinand99/fluxer/releases');
-		assert.equal(canary.getManualDownloadUrl(latestInfo('2026.910.101500')), 'https://github.com/Ferdinand99/fluxer/releases');
+		assert.equal(
+			stable.getManualDownloadUrl(latestInfo('2026.910.101500')),
+			'https://github.com/Ferdinand99/fluxer/releases',
+		);
+		assert.equal(
+			canary.getManualDownloadUrl(latestInfo('2026.910.101500')),
+			'https://github.com/Ferdinand99/fluxer/releases',
+		);
 	});
 });

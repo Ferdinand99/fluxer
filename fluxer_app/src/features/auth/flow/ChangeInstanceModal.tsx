@@ -18,7 +18,8 @@ export const CHANGE_INSTANCE_DESCRIPTOR = msg({
 });
 const INSTANCE_ADDRESS_DESCRIPTOR = msg({
 	message: 'Instance address',
-	comment: 'Label for the text field where the user enters the address of the server the desktop app should connect to.',
+	comment:
+		'Label for the text field where the user enters the address of the server the desktop app should connect to.',
 });
 const INVALID_INSTANCE_ADDRESS_DESCRIPTOR = msg({
 	message: 'Enter a valid http or https address.',
