@@ -11,6 +11,7 @@ import type {
 	TrayActionPayload,
 	TrayRuntimeStatePayload,
 } from '@electron/common/Types';
+import {openInstancePrompt} from '@electron/main/InstanceSwitch';
 import {relaunchStableLaunchPath} from '@electron/main/LinuxLaunchPath';
 import {onLocaleChange, t} from '@electron/main/MainI18n';
 import {app, type BrowserWindow, clipboard, Menu, nativeImage, Tray} from 'electron';
@@ -380,6 +381,10 @@ function buildTrayMenu(): Menu {
 		});
 	}
 	menuTemplate.push({type: 'separator'});
+	menuTemplate.push({
+		label: t('desktop.instance.change'),
+		click: () => runTrayMenuAction(openInstancePrompt),
+	});
 	menuTemplate.push({
 		label: t('desktop.tray.checkForUpdates'),
 		click: () => runTrayMenuAction(() => dispatchTrayAction({action: 'check-for-updates'})),

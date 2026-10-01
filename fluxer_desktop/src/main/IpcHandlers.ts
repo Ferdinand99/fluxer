@@ -22,6 +22,7 @@ import {
 } from '@electron/main/DesktopTray';
 import {registerDomainMigrationHandlers} from '@electron/main/DomainMigration';
 import {DownloadChecksumError, downloadFile} from '@electron/main/FileDownloads';
+import {registerInstanceHandlers} from '@electron/main/InstanceSwitch';
 import {
 	type LinuxAppearanceSnapshot,
 	type LinuxAppearanceSubscription,
@@ -138,6 +139,7 @@ export function registerIpcHandlers(): void {
 	registerVoiceDebugEventSinkPopoutIpcHandlers();
 	registerVoiceBackgroundMediaCacheHandlers();
 	registerDomainMigrationHandlers();
+	registerInstanceHandlers();
 	ipcMain.handle('get-desktop-info', () => getDesktopInfo());
 	ipcMain.handle('get-gpu-info', () => getGpuInfo());
 	ipcMain.handle('get-app-metrics', () => getAppMetricsSnapshot());

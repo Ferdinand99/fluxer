@@ -457,6 +457,11 @@ const api: ElectronAPI = {
 		version: 1,
 		setAppOrigin: (origin: string): Promise<void> => ipcRenderer.invoke('domain-migration:set-app-origin', origin),
 	},
+	instance: {
+		version: 1,
+		get: () => ipcRenderer.invoke('instance:get'),
+		set: (url: string | null): Promise<void> => ipcRenderer.invoke('instance:set', url),
+	},
 	toggleDevTools: (): void => {
 		ipcRenderer.send('toggle-devtools');
 	},

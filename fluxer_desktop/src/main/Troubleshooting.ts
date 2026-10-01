@@ -4,6 +4,7 @@ import {setDesktopTroubleshootingSettings} from '@electron/common/DesktopConfig'
 import {createChildLogger} from '@electron/common/Logger';
 import {getLaunchDesktopTroubleshootingSettings} from '@electron/main/DesktopDebugInfo';
 import {destroyDesktopTray} from '@electron/main/DesktopTray';
+import {openInstancePrompt} from '@electron/main/InstanceSwitch';
 import {relaunchStableLaunchPath} from '@electron/main/LinuxLaunchPath';
 import {t} from '@electron/main/MainI18n';
 import {clearSavedWindowBounds, getMainWindow, setQuitting} from '@electron/main/Window';
@@ -132,6 +133,10 @@ export function buildTroubleshootingMenuItems(): Array<MenuItemConstructorOption
 
 function buildHelpPopupMenu(): Menu {
 	const template: Array<MenuItemConstructorOptions> = [
+		{
+			label: t('desktop.instance.change'),
+			click: () => openInstancePrompt(),
+		},
 		{
 			label: t('desktop.appMenu.troubleshooting'),
 			submenu: buildTroubleshootingMenuItems(),

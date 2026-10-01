@@ -88,8 +88,8 @@ function topLevelFrame(url) {
 
 describe('DesktopConfig app origin', () => {
 	test('keeps loading the legacy root when no app origin is stored', () => {
-		assert.equal(loadDesktop().desktopConfig.getAppUrl(), 'https://web.fluxer.app');
-		assert.equal(loadDesktop({channel: 'canary'}).desktopConfig.getAppUrl(), 'https://web.canary.fluxer.app');
+		assert.equal(loadDesktop().desktopConfig.getAppUrl(), 'https://fluxer.opland.net');
+		assert.equal(loadDesktop({channel: 'canary'}).desktopConfig.getAppUrl(), 'https://fluxer.opland.net');
 	});
 
 	test('loads the app entry path for a stored migrated origin', () => {
@@ -101,9 +101,9 @@ describe('DesktopConfig app origin', () => {
 	});
 
 	test('loads the legacy root for a stored legacy origin', () => {
-		const {desktopConfig} = loadDesktop({settings: {app_origin: 'https://web.fluxer.app'}});
+		const {desktopConfig} = loadDesktop({settings: {app_origin: 'https://fluxer.opland.net'}});
 
-		assert.equal(desktopConfig.getAppUrl(), 'https://web.fluxer.app');
+		assert.equal(desktopConfig.getAppUrl(), 'https://fluxer.opland.net');
 	});
 
 	test('drops stored origins outside the channel allowlist', () => {
@@ -115,7 +115,7 @@ describe('DesktopConfig app origin', () => {
 			42,
 		]) {
 			const {desktopConfig} = loadDesktop({settings: {app_origin: appOrigin}});
-			assert.equal(desktopConfig.getAppUrl(), 'https://web.fluxer.app');
+			assert.equal(desktopConfig.getAppUrl(), 'https://fluxer.opland.net');
 		}
 	});
 
@@ -123,9 +123,9 @@ describe('DesktopConfig app origin', () => {
 		const stable = loadDesktop({settings: {app_origin: 'https://fluxer.com'}}).desktopConfig;
 		const canary = loadDesktop({channel: 'canary', settings: {app_origin: 'https://canary.fluxer.com'}}).desktopConfig;
 
-		assert.equal(stable.getAppUrlFallback('https://fluxer.com/app'), 'https://web.fluxer.app');
-		assert.equal(stable.getAppUrlFallback('https://fluxer.com/channels/@me'), 'https://web.fluxer.app');
-		assert.equal(canary.getAppUrlFallback('https://canary.fluxer.com/app'), 'https://web.canary.fluxer.app');
+		assert.equal(stable.getAppUrlFallback('https://fluxer.com/app'), 'https://fluxer.opland.net');
+		assert.equal(stable.getAppUrlFallback('https://fluxer.com/channels/@me'), 'https://fluxer.opland.net');
+		assert.equal(canary.getAppUrlFallback('https://canary.fluxer.com/app'), 'https://fluxer.opland.net');
 		assert.equal(stable.getAppUrlFallback('https://web.fluxer.app/channels/@me'), null);
 		assert.equal(stable.getAppUrlFallback('https://canary.fluxer.com/app'), null);
 		assert.equal(stable.getAppUrlFallback('not a url'), null);
@@ -152,7 +152,7 @@ describe('DomainMigration set app origin IPC', () => {
 	test('accepts the legacy frame of the running channel', () => {
 		const {readSettings, setAppOrigin} = loadDesktop({channel: 'canary'});
 
-		setAppOrigin(topLevelFrame('https://web.canary.fluxer.app/channels/@me'), 'https://canary.fluxer.com');
+		setAppOrigin(topLevelFrame('https://fluxer.opland.net/channels/@me'), 'https://canary.fluxer.com');
 
 		assert.equal(readSettings().app_origin, 'https://canary.fluxer.com');
 	});

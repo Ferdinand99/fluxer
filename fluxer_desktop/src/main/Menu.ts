@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {BUILD_CHANNEL} from '@electron/common/BuildChannel';
+import {PROJECT_REPOSITORY_URL} from '@electron/common/Constants';
+import {getAppUrl} from '@electron/common/DesktopConfig';
+import {openInstancePrompt} from '@electron/main/InstanceSwitch';
 import {onLocaleChange, t} from '@electron/main/MainI18n';
 import {openExternalDeduped} from '@electron/main/OpenExternal';
 import {buildTroubleshootingMenuItems} from '@electron/main/Troubleshooting';
@@ -50,11 +53,20 @@ function buildTemplate(): Array<MenuItemConstructorOptions> {
 			],
 		});
 	}
+	const changeInstanceItems: Array<MenuItemConstructorOptions> = [
+		{
+			label: t('desktop.instance.change'),
+			accelerator: 'CmdOrCtrl+Shift+Alt+I',
+			click: () => openInstancePrompt(),
+		},
+		{type: 'separator'},
+	];
 	template.push({
 		label: t('desktop.appMenu.file'),
 		submenu: isMac
-			? [{role: 'close'}]
+			? [...changeInstanceItems, {role: 'close'}]
 			: [
+					...changeInstanceItems,
 					{
 						label: t('desktop.appMenu.preferencesPlain'),
 						accelerator: 'Ctrl+,',
@@ -202,20 +214,20 @@ function buildTemplate(): Array<MenuItemConstructorOptions> {
 			{
 				label: t('desktop.appMenu.website'),
 				click: async () => {
-					await openExternalDeduped('https://fluxer.app');
+					await openExternalDeduped(getAppUrl());
 				},
 			},
 			{
 				label: t('desktop.appMenu.github'),
 				click: async () => {
-					await openExternalDeduped('https://github.com/fluxerapp/fluxer');
+					await openExternalDeduped(PROJECT_REPOSITORY_URL);
 				},
 			},
 			{type: 'separator'},
 			{
 				label: t('desktop.appMenu.reportIssue'),
 				click: async () => {
-					await openExternalDeduped('https://github.com/fluxerapp/fluxer/issues');
+					await openExternalDeduped(`${PROJECT_REPOSITORY_URL}/issues`);
 				},
 			},
 			{type: 'separator'},
