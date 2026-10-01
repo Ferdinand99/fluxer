@@ -37,9 +37,11 @@ read by the installed app and are not meant to be downloaded by hand.
 
 ### Windows updates (Velopack)
 
-The installed app checks `https://github.com/Ferdinand99/fluxer/releases/latest/download`
-(`VELOPACK_UPDATE_URL` in `fluxer_desktop/src/main/UpdaterDownloads.ts`), downloads the newest
-`*-full.nupkg` and installs it on restart. Things to know:
+The installed app checks this repository (`VELOPACK_UPDATE_URL` in
+`fluxer_desktop/src/main/UpdaterDownloads.ts`), downloads the newest `*-full.nupkg` and installs it on
+restart. Velopack recognises the github.com URL and reads the releases through the GitHub API; keep
+`VELOPACK_UPDATE_URL` as the plain repository URL (adding a path such as `/releases/latest/download`
+makes every check fail with a 404). Things to know:
 
 - GitHub's `latest` ignores **pre-releases**: a release only becomes an update once it is published
   as a normal release. Do not tick "prerelease" for a version you want installed clients to pick up.

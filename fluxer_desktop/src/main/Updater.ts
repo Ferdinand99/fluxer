@@ -271,6 +271,7 @@ async function checkVelopackForUpdates(
 				downloadStarted: false,
 			});
 		} catch (error) {
+			log.warn('Velopack update check failed', error);
 			send(getMainWindow(), {type: 'error', context, phase: 'check', message: getErrorMessage(error)});
 		}
 	})().finally(() => {
