@@ -11,7 +11,9 @@ can connect to a self-hosted instance. It is licensed under AGPL-3.0-or-later li
   (`fluxer_app`, only visible on instances that serve a build containing it).
 - **Identity**: name, IDs, `fluxins://` protocol, user data directory and icons.
 - **Default instance**: `https://fluxer.opland.net`, set in `fluxer_desktop/src/common/Constants.ts`.
-- **In-app updates are off** (`IN_APP_UPDATES_ENABLED`); updates are new releases from this repo.
+- **Updates**: the Windows installer updates itself from this repo's GitHub releases (Velopack, see
+  below). macOS and the portable zip cannot self-update, but the app tells you when a newer release
+  exists and links to the download (see "Update notices").
 
 ## Releasing a new build
 
@@ -25,10 +27,29 @@ publishes one release with:
 
 | Platform | File | Notes |
 | --- | --- | --- |
-| Windows x64 | `Fluxins-<version>-win-x64.zip` | Unzip anywhere and run `Fluxins.exe`. Not code-signed, so SmartScreen will warn. |
+| Windows x64 | `Fluxins-<version>-win-x64-Setup.exe` | Installer (Start menu, desktop shortcut, uninstall). Updates itself. Not code-signed, so SmartScreen will warn. |
+| Windows x64 | `Fluxins-<version>-win-x64.zip` | Portable: unzip anywhere and run `Fluxins.exe`. Does not update itself. |
 | macOS (Apple Silicon) | `Fluxins-<version>-mac-arm64.dmg` and `.zip` | Ad-hoc signed, not notarised. See below. |
 
-Each file has a `.sha256` checksum next to it.
+Each installer/archive has a `.sha256` checksum next to it. The release also contains the
+Velopack update feed (`releases.win.json`, `RELEASES` and the `*-full.nupkg` package); these are
+read by the installed app and are not meant to be downloaded by hand.
+
+### Windows updates (Velopack)
+
+The installed app checks `https://github.com/Ferdinand99/fluxer/releases/latest/download`
+(`VELOPACK_UPDATE_URL` in `fluxer_desktop/src/main/UpdaterDownloads.ts`), downloads the newest
+`*-full.nupkg` and installs it on restart. Things to know:
+
+- GitHub's `latest` ignores **pre-releases**: a release only becomes an update once it is published
+  as a normal release. Do not tick "prerelease" for a version you want installed clients to pick up.
+- Every release must contain the Velopack files, which the workflow always attaches. Do not delete
+  assets from the latest release.
+- Only clients installed with `Setup.exe` update themselves, not the zip.
+- Updates are unsigned. Anyone who can publish a release on this repository can ship code to every
+  installed client, so protect the repository and its Actions.
+- Which platforms self-update is set by `IN_APP_UPDATE_PLATFORMS` in
+  `fluxer_desktop/src/common/Constants.ts` (currently Windows only).
 
 ### macOS notes
 
@@ -42,6 +63,16 @@ To produce signed and notarised builds, add the repository secrets `CSC_LINK`,
 switched on automatically when `CSC_LINK`, `CSC_NAME` or `CSC_KEYCHAIN` is set
 (`macSigningEnabled` in `fluxer_desktop/electron-builder.config.cjs`). You also need your own
 provisioning profile (set `provisioningProfile` there) and entitlements for your Apple team.
+
+### Update notices (macOS and portable zip)
+
+Builds that cannot update themselves still check the newest release: the app reads
+`https://api.github.com/repos/Ferdinand99/fluxer/releases/latest` (`GITHUB_LATEST_RELEASE_API_URL`),
+compares the tag (`fluxins-v<version>`) with its own version and, if newer, shows the usual
+"update available" prompt with a link to the matching `.dmg` (macOS) or `Setup.exe` (Windows).
+Download and install it by hand. Like the Velopack feed this uses `latest`, so pre-releases are
+ignored. Anonymous GitHub API calls are limited to 60 per hour per IP, which is plenty for this.
+`MANUAL_UPDATE_FEED` in `Constants.ts` selects the source (`'github'` here, `'pkgs'` is upstream's feed).
 
 ### Building locally
 

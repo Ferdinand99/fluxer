@@ -157,6 +157,32 @@ jobs:
           pnpm exec electron-builder --config electron-builder.config.cjs
           --win dir --x64 --config.extraMetadata.version="$VERSION"
 
+      - name: Set up .NET SDK (Windows)
+        if: matrix.platform == 'windows'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Package Velopack installer and update feed (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          dotnet tool install --tool-path .velopack vpk --version 1.2.0
+          & ./.velopack/vpk.exe --yes pack `
+            --packId fluxins_desktop `
+            --packVersion $env:VERSION `
+            --packDir fluxer_desktop/dist-electron/win-unpacked `
+            --mainExe Fluxins.exe `
+            --packTitle Fluxins `
+            --packAuthors Opland `
+            --shortcuts Desktop,StartMenu `
+            --runtime win-x64 `
+            --icon fluxer_desktop/build_resources/icons-stable/icon.ico `
+            --outputDir velopack-out `
+            --delta None
+          if ($LASTEXITCODE -ne 0) { throw "vpk pack failed with exit code $LASTEXITCODE" }
+          Get-ChildItem velopack-out
+
       - name: Package Fluxins (macOS)
         if: matrix.platform == 'macos'
         working-directory: fluxer_desktop
@@ -191,6 +217,16 @@ jobs:
           $zip = Join-Path $PWD "release-files/Fluxins-$env:VERSION-win-x64.zip"
           Compress-Archive -Path (Join-Path $unpacked '*') -DestinationPath $zip -CompressionLevel Optimal
 
+          # Velopack: installer plus the update feed (releases.win.json and the full package).
+          # The feed files keep their names; the installer is renamed for download.
+          $setup = Get-ChildItem velopack-out -Filter '*-Setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'Velopack Setup.exe not found in velopack-out' }
+          Copy-Item $setup.FullName (Join-Path $PWD "release-files/Fluxins-$env:VERSION-win-x64-Setup.exe")
+          $feed = Get-ChildItem velopack-out -File | Where-Object { $_.Name -notlike '*-Setup.exe' -and $_.Name -notlike '*-Portable.zip' }
+          if (-not ($feed | Where-Object { $_.Name -eq 'releases.win.json' })) { throw 'releases.win.json not found in velopack-out' }
+          if (-not ($feed | Where-Object { $_.Name -like '*-full.nupkg' })) { throw 'Full nupkg not found in velopack-out' }
+          $feed | ForEach-Object { Copy-Item $_.FullName (Join-Path $PWD 'release-files') }
+
       - name: Collect release files (macOS)
         if: matrix.platform == 'macos'
         shell: bash
@@ -210,7 +246,9 @@ jobs:
         run: |
           cd release-files
           for f in *; do
-            case "$f" in *.sha256) continue ;; esac
+            case "$f" in
+              *.sha256 | *.nupkg | *.json | RELEASES*) continue ;;
+            esac
             if command -v sha256sum >/dev/null 2>&1; then
               sha256sum "$f" > "$f.sha256"
             else

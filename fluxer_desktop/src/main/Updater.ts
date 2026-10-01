@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {createRequire} from 'node:module';
-import {IN_APP_UPDATES_ENABLED} from '@electron/common/Constants';
+import {IN_APP_UPDATE_PLATFORMS, MANUAL_UPDATE_FEED} from '@electron/common/Constants';
 import {isPortableMode} from '@electron/common/UserDataPath';
 import {
 	AppImageChecksumError,
@@ -27,14 +27,17 @@ import {
 import {
 	buildManualVersionDownloadUrl,
 	DOWNLOAD_PAGE_URL,
+	GITHUB_LATEST_RELEASE_API_URL,
 	getManualDownloadOptions,
 	getManualDownloadUrl,
 	MANUAL_DESKTOP_FORMATS,
 	type ManualDesktopFormat,
 	type ManualLatestFile,
 	type ManualLatestInfo,
+	parseGithubLatestRelease,
 	UPDATE_BASE_URL,
 	type UpdaterDownloadOption,
+	VELOPACK_UPDATE_URL,
 } from '@electron/main/UpdaterDownloads';
 import {setQuitting} from '@electron/main/Window';
 import {app, autoUpdater, type BrowserWindow, ipcMain} from 'electron';
@@ -153,7 +156,7 @@ function getVelopackUpdateSize(update: VelopackUpdate): number | null {
 
 function createVelopackUpdateManager() {
 	const {UpdateManager} = requireModule('velopack') as typeof import('velopack');
-	return new UpdateManager(UPDATE_BASE_URL);
+	return new UpdateManager(VELOPACK_UPDATE_URL);
 }
 
 type VelopackUpdateManager = ReturnType<typeof createVelopackUpdateManager>;
@@ -536,10 +539,29 @@ function parseManualLatestFiles(value: unknown): Partial<Record<ManualDesktopFor
 	return files;
 }
 
+async function fetchGithubLatest(): Promise<ManualLatestInfo> {
+	const response = await fetch(GITHUB_LATEST_RELEASE_API_URL, {
+		cache: 'no-store',
+		headers: {
+			Accept: 'application/vnd.github+json',
+			'User-Agent': `Fluxins-Updater/${app.getVersion()}`,
+		},
+	});
+	if (!response.ok) {
+		throw new Error(`Latest release request failed: ${response.status}`);
+	}
+	return parseGithubLatestRelease(await response.json());
+}
+
 async function fetchManualLatest(options: {forceRefresh?: boolean} = {}): Promise<ManualLatestInfo> {
 	const now = Date.now();
 	if (!options.forceRefresh && manualLatestCache && now - manualLatestCache.at < MANUAL_CACHE_TTL_MS) {
 		return manualLatestCache.info;
+	}
+	if (MANUAL_UPDATE_FEED === 'github') {
+		const info = await fetchGithubLatest();
+		manualLatestCache = {at: now, info};
+		return info;
 	}
 	const response = await fetch(`${UPDATE_BASE_URL}/latest`, {
 		cache: 'no-store',
@@ -805,7 +827,7 @@ function registerManualUpdater(
 }
 
 export function registerUpdater(getMainWindow: () => BrowserWindow | null) {
-	if (!IN_APP_UPDATES_ENABLED || !app.isPackaged) {
+	if (!app.isPackaged) {
 		registerManualUpdater(getMainWindow, 'unpackaged');
 		return;
 	}
@@ -815,6 +837,11 @@ export function registerUpdater(getMainWindow: () => BrowserWindow | null) {
 	}
 	if (isFlatpakRuntime()) {
 		registerManualUpdater(getMainWindow, 'managed-package');
+		return;
+	}
+	if (!IN_APP_UPDATE_PLATFORMS.includes(process.platform)) {
+		// No self-update on this platform: tell the user about new releases and link to the download.
+		registerManualUpdater(getMainWindow, 'platform');
 		return;
 	}
 	if (process.platform === 'win32') {
