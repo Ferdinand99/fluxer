@@ -211,3 +211,72 @@ describe('UpdaterDownloads manual download url', () => {
 		);
 	});
 });
+
+describe('UpdaterDownloads GitHub latest release', () => {
+	const REPO = 'https://github.com/Ferdinand99/fluxer';
+	const asset = (name) => ({name, browser_download_url: `${REPO}/releases/download/fluxins-v0.2.0/${name}`});
+	const release = {
+		tag_name: 'fluxins-v0.2.0',
+		published_at: '2026-10-02T10:00:00Z',
+		assets: [
+			asset('Fluxins-0.2.0-win-x64-Setup.exe'),
+			asset('Fluxins-0.2.0-win-x64.zip'),
+			asset('Fluxins-0.2.0-mac-arm64.dmg'),
+			asset('Fluxins-0.2.0-mac-arm64.zip'),
+			asset('Fluxins-0.2.0-mac-arm64.dmg.sha256'),
+			asset('releases.win.json'),
+		],
+	};
+
+	test('uses the tag without its prefix as the version and keeps the publish date', () => {
+		const info = loadUpdaterDownloads({platform: 'darwin', arch: 'arm64'}).parseGithubLatestRelease(release);
+
+		assert.equal(info.version, '0.2.0');
+		assert.equal(info.pubDate, '2026-10-02T10:00:00Z');
+	});
+
+	test('picks the macOS dmg and zip for the running architecture', () => {
+		const downloads = loadUpdaterDownloads({platform: 'darwin', arch: 'arm64'});
+		const info = downloads.parseGithubLatestRelease(release);
+
+		assert.equal(info.files.dmg.url, `${REPO}/releases/download/fluxins-v0.2.0/Fluxins-0.2.0-mac-arm64.dmg`);
+		assert.equal(info.files.zip.url, `${REPO}/releases/download/fluxins-v0.2.0/Fluxins-0.2.0-mac-arm64.zip`);
+		assert.equal(info.files.setup, undefined);
+		assert.equal(downloads.getManualDownloadUrl(info), info.files.dmg.url);
+	});
+
+	test('picks the Windows installer, not the portable zip', () => {
+		const downloads = loadUpdaterDownloads({platform: 'win32', arch: 'x64'});
+		const info = downloads.parseGithubLatestRelease(release);
+
+		assert.equal(info.files.setup.url, `${REPO}/releases/download/fluxins-v0.2.0/Fluxins-0.2.0-win-x64-Setup.exe`);
+		assert.equal(info.files.zip, undefined);
+		assert.equal(downloads.getManualDownloadUrl(info), info.files.setup.url);
+	});
+
+	test('does not offer another architecture and falls back to the releases page', () => {
+		const downloads = loadUpdaterDownloads({platform: 'darwin', arch: 'x64'});
+		const info = downloads.parseGithubLatestRelease(release);
+
+		assert.equal(Object.keys(info.files).length, 0);
+		assert.equal(downloads.getManualDownloadUrl(info), `${REPO}/releases`);
+	});
+
+	test('accepts a plain v-prefixed tag and a response without assets', () => {
+		const info = loadUpdaterDownloads({platform: 'darwin', arch: 'arm64'}).parseGithubLatestRelease({
+			tag_name: 'v1.2.3',
+		});
+
+		assert.equal(info.version, '1.2.3');
+		assert.equal(info.pubDate, null);
+		assert.equal(Object.keys(info.files).length, 0);
+	});
+
+	test('rejects responses without a usable tag', () => {
+		const {parseGithubLatestRelease} = loadUpdaterDownloads({platform: 'darwin', arch: 'arm64'});
+
+		assert.throws(() => parseGithubLatestRelease(null), /not an object/);
+		assert.throws(() => parseGithubLatestRelease({}), /missing tag name/);
+		assert.throws(() => parseGithubLatestRelease({tag_name: 'fluxins-v'}), /no version/);
+	});
+});
