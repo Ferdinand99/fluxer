@@ -331,7 +331,7 @@ describe('Updater AppImage lifecycle', () => {
 			assert.equal(available.downloadOptions[0].format, 'appimage');
 			assert.equal(
 				available.downloadOptions[0].suggestedName,
-				`Fluxer-Canary-${PUBLISHED_VERSION}-linux-arm64.AppImage`,
+				`Fluxins-Canary-${PUBLISHED_VERSION}-linux-arm64.AppImage`,
 			);
 		} finally {
 			chmodSync(install.applications, 0o755);
