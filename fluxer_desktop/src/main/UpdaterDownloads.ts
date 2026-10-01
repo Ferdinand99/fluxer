@@ -21,8 +21,10 @@ const DESKTOP_DOWNLOAD_ARCH = getDesktopDownloadArch(process.arch);
 const PKGS_BASE_URL = 'https://pkgs.fluxer.com';
 export const UPDATE_BASE_URL = `${PKGS_BASE_URL}/desktop/${BUILD_CHANNEL}/${process.platform}/${DESKTOP_DOWNLOAD_ARCH}`;
 export const DOWNLOAD_PAGE_URL = `${PROJECT_REPOSITORY_URL}/releases`;
-// Velopack reads releases.win.json and the packages from the newest non-prerelease release.
-export const VELOPACK_UPDATE_URL = `${PROJECT_REPOSITORY_URL}/releases/latest/download`;
+// Velopack recognises a github.com repository URL and reads the newest non-prerelease release through
+// the GitHub API. Do not append a path such as /releases/latest/download: Velopack then mis-parses the
+// repository and every check fails with a 404.
+export const VELOPACK_UPDATE_URL = PROJECT_REPOSITORY_URL;
 export const GITHUB_LATEST_RELEASE_API_URL = `https://api.github.com/repos/${PROJECT_REPOSITORY_URL.replace(/^https:\/\/github\.com\//, '').replace(/\/$/, '')}/releases/latest`;
 const RELEASE_TAG_PREFIX = 'fluxins-v';
 
