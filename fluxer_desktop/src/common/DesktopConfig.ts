@@ -25,6 +25,7 @@ interface DesktopConfig extends Record<string, unknown> {
 	troubleshooting?: PersistedDesktopTroubleshootingSettings;
 	theme_allowed_local_files?: Array<string>;
 	app_origin?: string;
+	custom_app_url?: string;
 }
 
 export type ChromiumSwitchesSetting = ReadonlyArray<string> | Record<string, unknown>;
@@ -156,6 +157,21 @@ function sanitizeAppOrigin(value: unknown): string | undefined {
 	return typeof value === 'string' && getOfficialAppOrigins().includes(value) ? value : undefined;
 }
 
+export function normalizeInstanceUrl(value: unknown): string | undefined {
+	if (typeof value !== 'string') return undefined;
+	const trimmed = value.trim();
+	if (!trimmed) return undefined;
+	const candidate = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(trimmed) ? trimmed : `https://${trimmed}`;
+	try {
+		const url = new URL(candidate);
+		if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+		if (!url.hostname) return undefined;
+		return url.origin;
+	} catch {
+		return undefined;
+	}
+}
+
 function sanitizeDesktopConfig(value: unknown): DesktopConfig {
 	if (!isRecord(value)) {
 		return {};
@@ -167,6 +183,12 @@ function sanitizeDesktopConfig(value: unknown): DesktopConfig {
 		nextConfig.app_origin = appOrigin;
 	} else {
 		delete nextConfig.app_origin;
+	}
+	const customAppUrl = normalizeInstanceUrl(value.custom_app_url);
+	if (customAppUrl) {
+		nextConfig.custom_app_url = customAppUrl;
+	} else {
+		delete nextConfig.custom_app_url;
 	}
 	const chromiumSwitches = sanitizeChromiumSwitchesSetting(value.chromiumSwitches);
 	if (chromiumSwitches) {
@@ -340,6 +362,9 @@ export function getAppUrl(): string {
 	if (runtimeAppUrlOverride) {
 		return runtimeAppUrlOverride;
 	}
+	if (config.custom_app_url) {
+		return config.custom_app_url;
+	}
 	const migratedAppOrigin = getMigratedAppOrigin();
 	if (config.app_origin === migratedAppOrigin) {
 		return `${migratedAppOrigin}${MIGRATED_APP_ENTRY_PATH}`;
@@ -366,7 +391,28 @@ export function setAppOrigin(origin: string): boolean {
 }
 
 export function getCustomAppUrl(): string | null {
-	return runtimeAppUrlOverride;
+	return runtimeAppUrlOverride ?? config.custom_app_url ?? null;
+}
+
+export function getDefaultAppUrl(): string {
+	return getLegacyAppUrl();
+}
+
+export function getStoredInstanceUrl(): string | null {
+	return config.custom_app_url ?? null;
+}
+
+export function setStoredInstanceUrl(value: string | null): boolean {
+	if (value === null) {
+		delete config.custom_app_url;
+		saveDesktopConfig();
+		return true;
+	}
+	const normalized = normalizeInstanceUrl(value);
+	if (normalized === undefined) return false;
+	config.custom_app_url = normalized;
+	saveDesktopConfig();
+	return true;
 }
 
 export function setRuntimeAppUrlOverride(appUrl: string | null): void {

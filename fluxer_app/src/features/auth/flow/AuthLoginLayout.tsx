@@ -23,6 +23,7 @@ import {
 	SIGN_IN_WITH_OLD_APP_DESCRIPTOR,
 	showBrowserLoginHandoffModal,
 } from '@app/features/auth/flow/BrowserLoginHandoffModal';
+import {CHANGE_INSTANCE_DESCRIPTOR, showChangeInstanceModal} from '@app/features/auth/flow/ChangeInstanceModal';
 import DesktopHandoffAccountSelector from '@app/features/auth/flow/DesktopHandoffAccountSelector';
 import {ConnectedHandoffApprovalFlow} from '@app/features/auth/flow/HandoffApprovalFlow';
 import IpAuthorizationScreen from '@app/features/auth/flow/IpAuthorizationScreen';
@@ -47,7 +48,7 @@ import {type Account, SessionExpiredError} from '@app/features/platform/state/Au
 import {IS_DEV} from '@app/features/platform/types/Env';
 import {Button} from '@app/features/ui/button/Button';
 import {SteppedCarousel} from '@app/features/ui/stepped_carousel/SteppedCarousel';
-import {isDesktop} from '@app/features/ui/utils/NativeUtils';
+import {getElectronAPI, isDesktop} from '@app/features/ui/utils/NativeUtils';
 import * as FormUtils from '@app/lib/forms';
 import {msg} from '@lingui/core/macro';
 import {Trans, useLingui} from '@lingui/react/macro';
@@ -193,6 +194,7 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 		},
 	});
 	const showBrowserPasskey = IS_DEV || isDesktop();
+	const showChangeInstance = Boolean(getElectronAPI()?.instance);
 	const passkeyControlsDisabled =
 		isLoading || Boolean(form.isSubmitting) || isPasskeyLoading || isPasskeyBridgeRedeeming;
 	const offerOldAppSignIn = useMemo(
@@ -499,6 +501,18 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 						</span>
 						{styledRegisterLink}
 					</div>
+					{showChangeInstance ? (
+						<div className={styles.footerText} data-flx="auth.flow.auth-login-layout.footer-text--change-instance">
+							<button
+								type="button"
+								className={styles.footerLink}
+								onClick={showChangeInstanceModal}
+								data-flx="auth.flow.auth-login-layout.button.change-instance"
+							>
+								{i18n._(CHANGE_INSTANCE_DESCRIPTOR)}
+							</button>
+						</div>
+					) : null}
 				</div>
 			</>
 		);

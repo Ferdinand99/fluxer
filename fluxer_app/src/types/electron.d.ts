@@ -342,6 +342,11 @@ export interface ElectronAPI {
 	platform: 'darwin' | 'win32' | 'linux' | string;
 	buildChannel: 'stable' | 'canary';
 	openExternal(url: string): Promise<void>;
+	instance?: {
+		version: number;
+		get(): Promise<{currentUrl: string; defaultUrl: string; isCustom: boolean}>;
+		set(url: string | null): Promise<void>;
+	};
 	downloadFile(url: string, suggestedName: string, sha256?: string | null): Promise<DownloadResult>;
 	onUpdaterEvent(callback: (event: UpdaterEvent) => void): () => void;
 	updaterCheck(context: 'user' | 'background'): Promise<void>;

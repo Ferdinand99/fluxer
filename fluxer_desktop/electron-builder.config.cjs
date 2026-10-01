@@ -8,14 +8,14 @@ const path = require('node:path');
 const {promisify} = require('node:util');
 const execFileAsync = promisify(execFile);
 const isLinuxBuild = process.argv.includes('--linux');
-const productName = isCanary ? 'Fluxer Canary' : 'Fluxer';
-const linuxOptDirName = isCanary ? 'fluxer-canary' : 'Fluxer';
+const productName = isCanary ? 'Fluxins Canary' : 'Fluxins';
+const linuxOptDirName = isCanary ? 'fluxins-canary' : 'Fluxins';
 const installedProductName = isLinuxBuild ? linuxOptDirName : productName;
-const artifactProductName = isCanary ? 'Fluxer-Canary' : 'Fluxer';
-const appId = isCanary ? 'app.fluxer.canary' : 'app.fluxer';
+const artifactProductName = isCanary ? 'Fluxins-Canary' : 'Fluxins';
+const appId = isCanary ? 'net.opland.fluxins.canary' : 'net.opland.fluxins';
 const iconDir = isCanary ? 'icons-canary' : 'icons-stable';
-const packageName = isCanary ? 'fluxer_desktop_canary' : 'fluxer_desktop';
-const linuxPackageName = isCanary ? 'fluxer-canary' : 'fluxer';
+const packageName = isCanary ? 'fluxins_desktop_canary' : 'fluxins_desktop';
+const linuxPackageName = isCanary ? 'fluxins-canary' : 'fluxins';
 const linuxDesktopActionIds = ['open-settings', 'new-dm'];
 const linuxDesktopActionList = `${linuxDesktopActionIds.join(';')};`;
 const linuxGlibcBaseline = Object.freeze({major: 2, minor: 35, patch: 0, name: 'GLIBC_2.35'});
@@ -26,8 +26,8 @@ const rpmBuildIdLinkFpmArgs = [
 	'--rpm-rpmbuild-define',
 	'_missing_build_ids_terminate_build 0',
 ];
-const legacyLinuxStableDebPackageName = 'fluxer-app';
-const legacyLinuxStableRpmPackageName = 'fluxer_app';
+const legacyLinuxStableDebPackageName = 'fluxins-app';
+const legacyLinuxStableRpmPackageName = 'fluxins_app';
 const legacyLinuxStablePackageNames = {
 	'.deb': legacyLinuxStableDebPackageName,
 	'.rpm': legacyLinuxStableRpmPackageName,
@@ -38,7 +38,7 @@ const legacyLinuxStableDebFpmArgs = isCanary
 const legacyLinuxStableRpmFpmArgs = isCanary
 	? []
 	: ['--replaces', legacyLinuxStableRpmPackageName, '--conflicts', legacyLinuxStableRpmPackageName];
-const legacyLinuxCanaryOptDir = '/opt/Fluxer Canary';
+const legacyLinuxCanaryOptDir = '/opt/Fluxins Canary';
 const legacyLinuxOptDirSweepScript = path.resolve(__dirname, 'packaging/linux/rpm-post-transaction.sh');
 const legacyLinuxOptDirRpmFpmArgs = isCanary ? ['--rpm-posttrans', legacyLinuxOptDirSweepScript] : [];
 const macOSMinimumSystemVersion = '13.0';
@@ -338,13 +338,13 @@ const platformRuntimeDependencyExcludes =
 const linuxDesktopEntry = {
 	Name: productName,
 	GenericName: 'Instant Messenger',
-	Comment: isCanary ? 'Canary build of Fluxer' : 'Instant messaging and VoIP',
+	Comment: isCanary ? 'Canary build of Fluxins' : 'Instant messaging and VoIP',
 	Keywords: 'chat;im;messaging;messenger;voip;voice;video;call;',
 	Categories: 'Network;InstantMessaging;Chat;',
 	StartupWMClass: linuxPackageName,
 	StartupNotify: 'true',
 	SingleMainWindow: 'true',
-	MimeType: 'x-scheme-handler/fluxer;',
+	MimeType: 'x-scheme-handler/fluxins;',
 	'X-GNOME-UsesNotifications': 'true',
 };
 const linuxDesktopEntryWithActions = {
@@ -1475,7 +1475,7 @@ async function verifyLinuxArtifactContracts(buildResult) {
 module.exports = {
 	appId,
 	productName: installedProductName,
-	copyright: 'Copyright © 2026 Fluxer Platform AB',
+	copyright: 'Copyright © 2026 Opland. Based on Fluxer (AGPL-3.0-or-later)',
 	artifactName: `${artifactProductName}-\${version}-\${os}-\${arch}.\${ext}`,
 	directories: {
 		buildResources: 'build_resources',
@@ -1588,7 +1588,7 @@ module.exports = {
 		{
 			name: appId,
 			role: 'Viewer',
-			schemes: ['fluxer'],
+			schemes: ['fluxins'],
 		},
 	],
 	beforePack: verifyNativePackageInputs,
@@ -1625,11 +1625,11 @@ module.exports = {
 			},
 		],
 		extendInfo: {
-			NSMicrophoneUsageDescription: 'Fluxer needs access to your microphone to enable voice chat features.',
-			NSCameraUsageDescription: 'Fluxer needs access to your camera to enable video chat features.',
-			NSAppleEventsUsageDescription: 'Fluxer needs access to Apple Events for automation features.',
-			NSAudioCaptureUsageDescription: 'Fluxer captures audio from the screen or window you choose to share.',
-			NSScreenCaptureUsageDescription: 'Fluxer captures the screen or window you choose to share.',
+			NSMicrophoneUsageDescription: 'Fluxins needs access to your microphone to enable voice chat features.',
+			NSCameraUsageDescription: 'Fluxins needs access to your camera to enable video chat features.',
+			NSAppleEventsUsageDescription: 'Fluxins needs access to Apple Events for automation features.',
+			NSAudioCaptureUsageDescription: 'Fluxins captures audio from the screen or window you choose to share.',
+			NSScreenCaptureUsageDescription: 'Fluxins captures the screen or window you choose to share.',
 		},
 	},
 	dmg: {

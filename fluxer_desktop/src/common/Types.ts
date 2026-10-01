@@ -632,6 +632,12 @@ export interface DomainMigrationApi {
 	setAppOrigin: (origin: string) => Promise<void>;
 }
 
+export interface InstanceApi {
+	version: 1;
+	get: () => Promise<{currentUrl: string; defaultUrl: string; isCustom: boolean}>;
+	set: (url: string | null) => Promise<void>;
+}
+
 export interface ElectronAPI {
 	platform: NodeJS.Platform;
 	buildChannel: 'stable' | 'canary';
@@ -766,6 +772,7 @@ export interface ElectronAPI {
 	passkeyRegister: (options: PublicKeyCredentialCreationOptionsJSON) => Promise<RegistrationResponseJSON>;
 	passkeyRpIds: ReadonlyArray<string>;
 	domainMigration: DomainMigrationApi;
+	instance: InstanceApi;
 	virtmic: VirtmicApi;
 	nativeAudio: NativeAudioApi;
 	nativeScreenCapture: NativeScreenCaptureApi;

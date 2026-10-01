@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {createRequire} from 'node:module';
+import {IN_APP_UPDATES_ENABLED} from '@electron/common/Constants';
 import {isPortableMode} from '@electron/common/UserDataPath';
 import {
 	AppImageChecksumError,
@@ -804,7 +805,7 @@ function registerManualUpdater(
 }
 
 export function registerUpdater(getMainWindow: () => BrowserWindow | null) {
-	if (!app.isPackaged) {
+	if (!IN_APP_UPDATES_ENABLED || !app.isPackaged) {
 		registerManualUpdater(getMainWindow, 'unpackaged');
 		return;
 	}

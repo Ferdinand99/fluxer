@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {BUILD_CHANNEL} from '@electron/common/BuildChannel';
+import {PROJECT_REPOSITORY_URL} from '@electron/common/Constants';
 
 export type UpdaterDownloadOption = {
 	format: ManualDesktopFormat;
@@ -19,8 +20,7 @@ function getDesktopDownloadArch(arch: NodeJS.Architecture): DesktopDownloadArch 
 const DESKTOP_DOWNLOAD_ARCH = getDesktopDownloadArch(process.arch);
 const PKGS_BASE_URL = 'https://pkgs.fluxer.com';
 export const UPDATE_BASE_URL = `${PKGS_BASE_URL}/desktop/${BUILD_CHANNEL}/${process.platform}/${DESKTOP_DOWNLOAD_ARCH}`;
-export const DOWNLOAD_PAGE_URL =
-	BUILD_CHANNEL === 'canary' ? 'https://canary.fluxer.app/download' : 'https://fluxer.app/download';
+export const DOWNLOAD_PAGE_URL = `${PROJECT_REPOSITORY_URL}/releases`;
 
 export const MANUAL_DESKTOP_FORMATS = ['setup', 'dmg', 'zip', 'appimage', 'deb', 'rpm', 'tar_gz'] as const;
 
@@ -77,7 +77,7 @@ export function buildManualVersionDownloadUrl(version: string, format: ManualDes
 }
 
 function getArtifactProductName(): string {
-	return BUILD_CHANNEL === 'canary' ? 'Fluxer-Canary' : 'Fluxer';
+	return BUILD_CHANNEL === 'canary' ? 'Fluxins-Canary' : 'Fluxins';
 }
 
 function getManualUpdateSuggestedName(format: LinuxManualDesktopFormat, version: string): string {

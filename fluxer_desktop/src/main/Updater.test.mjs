@@ -137,6 +137,10 @@ function loadUpdater({
 			},
 		},
 		'@electron/common/BuildChannel': {BUILD_CHANNEL: 'canary'},
+		'@electron/common/Constants': {
+			IN_APP_UPDATES_ENABLED: true,
+			PROJECT_REPOSITORY_URL: 'https://github.com/Ferdinand99/fluxer',
+		},
 		'@electron/common/UserDataPath': {isPortableMode: () => false},
 		'@electron/main/DesktopTray': {destroyDesktopTray() {}},
 		'@electron/main/LinuxSandbox': {isFlatpakRuntime: () => false},
