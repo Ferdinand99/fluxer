@@ -83,8 +83,12 @@ export class UserRepository implements IUserRepositoryAggregate {
 		return this.accountRepo.patchUpsert(userId, patchData, oldData);
 	}
 
-	async compareAndSetSuspiciousFlags(user: User, suspiciousFlags: number): Promise<User | null> {
-		return this.accountRepo.compareAndSetSuspiciousFlags(user, suspiciousFlags);
+	async compareAndSetFlags(user: User, flags: bigint): Promise<User | null> {
+		return this.accountRepo.compareAndSetFlags(user, flags);
+	}
+
+	async updateFlags(userId: UserID, mutate: (flags: bigint) => bigint): Promise<User | null> {
+		return this.accountRepo.updateFlags(userId, mutate);
 	}
 
 	async updateDeletionSchedule(user: User, patch: UserDeletionScheduleUpdate): Promise<User> {
@@ -117,6 +121,10 @@ export class UserRepository implements IUserRepositoryAggregate {
 
 	async findDiscriminatorsByUsername(username: string): Promise<Set<number>> {
 		return this.accountRepo.findDiscriminatorsByUsername(username);
+	}
+
+	async findUsersByUsername(username: string): Promise<Array<User>> {
+		return this.accountRepo.findUsersByUsername(username);
 	}
 
 	async findByEmail(email: string): Promise<User | null> {
@@ -730,6 +738,10 @@ export class UserRepository implements IUserRepositoryAggregate {
 
 	async getPaymentByCheckoutSession(checkoutSessionId: string): Promise<Payment | null> {
 		return this.contentRepo.getPaymentByCheckoutSession(checkoutSessionId);
+	}
+
+	async findPaymentsByUserId(userId: UserID): Promise<Array<Payment>> {
+		return this.contentRepo.findPaymentsByUserId(userId);
 	}
 
 	async getPaymentByPaymentIntent(paymentIntentId: string): Promise<Payment | null> {

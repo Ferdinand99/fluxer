@@ -11,7 +11,13 @@ import {
 	parsePublicOrigin,
 	parseWebOrigin,
 } from '@fluxer/config/src/EndpointDerivation';
-import {CACHE_PURGE_ADAPTER_NAMES, type MasterConfig, STORE_PRODUCT_SLOT_NAMES} from '@fluxer/config/src/MasterConfig';
+import {
+	ACCOUNT_IDENTITY_MODE_NAMES,
+	CACHE_PURGE_ADAPTER_NAMES,
+	type MasterConfig,
+	STORE_PRODUCT_SLOT_NAMES,
+	TAG_STYLE_NAMES,
+} from '@fluxer/config/src/MasterConfig';
 
 let cachedConfig: MasterConfig | null = null;
 
@@ -98,6 +104,7 @@ function defaultConfig(): MasterConfig {
 				max_inflight_requests: 512,
 				ip_ban_exempt_ips: [],
 				donation_proxy_key: '',
+				trusted_callers: [],
 				presigned_attachment_uploads_enabled: false,
 				presigned_harvest_downloads_enabled: true,
 				unfurl_ignored_hosts: [],
@@ -136,6 +143,7 @@ function defaultConfig(): MasterConfig {
 		auth: {
 			sudo_mode_secret: '',
 			connection_initiation_secret: '',
+			profile_pseudonym_secret: '',
 			sso_allow_private_addresses: false,
 			passkeys: {
 				rp_name: 'Fluxer',
@@ -163,6 +171,7 @@ function defaultConfig(): MasterConfig {
 				provider: 'none',
 				from_email: '',
 				from_name: 'Fluxer',
+				reply_to_email: '',
 				app_base_url: '',
 			},
 			voice: {
@@ -245,6 +254,8 @@ function defaultConfig(): MasterConfig {
 			setup: {
 				configured: false,
 			},
+			account_identity: null,
+			tag_style: null,
 		},
 		dev: {
 			relax_registration_rate_limits: false,
@@ -289,6 +300,24 @@ function assertOneOf<T extends string>(value: string, allowed: ReadonlyArray<T>,
 function requireString(value: string | undefined, envName: string): void {
 	if (!value || value.trim().length === 0) {
 		throw new Error(`${envName} is required`);
+	}
+}
+
+const DEVELOPMENT_PROFILE_PSEUDONYM_SECRET = 'fluxer-dev-profile-pseudonym-secret';
+
+function applyProfilePseudonymSecret(config: MasterConfig): void {
+	if (config.auth.profile_pseudonym_secret.trim().length > 0) {
+		return;
+	}
+	if (config.env === 'production') {
+		throw new Error('FLUXER_PROFILE_PSEUDONYM_SECRET is required');
+	}
+	config.auth.profile_pseudonym_secret = DEVELOPMENT_PROFILE_PSEUDONYM_SECRET;
+}
+
+function validateReplyToEmail(value: string): void {
+	if (value !== '' && !/^[^\s@<>,;"]+@[^\s@<>,;"]+$/.test(value)) {
+		throw new Error('FLUXER_EMAIL_REPLY_TO_EMAIL must be a single email address such as support@example.com');
 	}
 }
 
@@ -561,11 +590,18 @@ function normalizeConfig(config: MasterConfig): MasterConfig {
 	assertOneOf(config.integrations.email.provider, ['smtp', 'none'], 'FLUXER_EMAIL_PROVIDER');
 	assertOneOf(config.integrations.search.engine, ['elasticsearch', 'meilisearch'], 'FLUXER_SEARCH_ENGINE');
 	assertOneOf(config.integrations.cache_purge.adapter, CACHE_PURGE_ADAPTER_NAMES, 'FLUXER_CACHE_PURGE_ADAPTER');
+	if (config.instance.tag_style !== null) {
+		assertOneOf(config.instance.tag_style, TAG_STYLE_NAMES, 'FLUXER_TAG_STYLE');
+	}
+	if (config.instance.account_identity !== null) {
+		assertOneOf(config.instance.account_identity, ACCOUNT_IDENTITY_MODE_NAMES, 'FLUXER_ACCOUNT_IDENTITY');
+	}
 	validatePostgresConfig(config);
 	validateApiWorkerConfig(config);
 	validateStorageChangeFeedConfig(config);
 	validateCachePurgeConfig(config);
 	validateStoreBillingConfig(config);
+	validateReplyToEmail(config.integrations.email.reply_to_email);
 	normalizeAppOriginAliases(config);
 	assertIntegerInRange(config.services.api.max_inflight_requests, 'FLUXER_API_MAX_INFLIGHT_REQUESTS', 1, 100_000);
 	assertIntegerInRange(config.services.api.headers_timeout_ms, 'FLUXER_API_HEADERS_TIMEOUT_MS', 1_000, 3_600_000);
@@ -577,6 +613,7 @@ function normalizeConfig(config: MasterConfig): MasterConfig {
 	}
 	requireString(config.auth.sudo_mode_secret, 'FLUXER_SUDO_MODE_SECRET');
 	requireString(config.auth.connection_initiation_secret, 'FLUXER_CONNECTION_INITIATION_SECRET');
+	applyProfilePseudonymSecret(config);
 	validateVapidConfig(config);
 	requireString(config.s3?.access_key_id, 'FLUXER_S3_ACCESS_KEY_ID');
 	requireString(config.s3?.secret_access_key, 'FLUXER_S3_SECRET_ACCESS_KEY');

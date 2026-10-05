@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {createRoleIDSet, createUserID, type RoleID, type UserID} from '@app/api/BrandedTypes';
-import {Config} from '@app/api/Config';
+import {usesUsernameSignIn} from '@app/api/instance/AccountIdentityModeCache';
 import type {Guild} from '@app/api/models/Guild';
 import type {GuildMember} from '@app/api/models/GuildMember';
 import type {User} from '@app/api/models/User';
@@ -11,7 +11,6 @@ import {
 	getEffectiveGuildVerificationLevel,
 } from '@fluxer/constants/src/GuildConstants';
 import {GuildEmailVerificationRequiredError} from '@fluxer/errors/src/domains/auth/EmailVerificationRequiredError';
-import {GuildPhoneVerificationRequiredError} from '@fluxer/errors/src/domains/auth/GuildPhoneVerificationRequiredError';
 import {AccountTooNewForGuildError} from '@fluxer/errors/src/domains/guild/AccountTooNewForGuildError';
 import {GuildVerificationRequiredError} from '@fluxer/errors/src/domains/guild/GuildVerificationRequiredError';
 import type {GuildMemberResponse} from '@fluxer/schema/src/domains/guild/GuildMemberSchemas';
@@ -41,18 +40,18 @@ function checkGuildVerification(params: VerificationParams): void {
 	if (memberRoles && memberRoles.size > 0) {
 		return;
 	}
-	if (verificationLevel === GuildVerificationLevel.VERY_HIGH) {
-		if (!user.hasVerifiedPhone) {
-			throw new GuildPhoneVerificationRequiredError();
+	if (usesUsernameSignIn()) {
+		if (user.isUnclaimedAccount()) {
+			throw new GuildVerificationRequiredError('You need to claim your account to send messages in this guild.');
 		}
-		return;
-	}
-	if (!user.email) {
-		throw new GuildVerificationRequiredError('You need to claim your account to send messages in this guild.');
-	}
-	if (verificationLevel >= GuildVerificationLevel.LOW) {
-		if (!user.emailVerified) {
-			throw new GuildEmailVerificationRequiredError();
+	} else {
+		if (!user.email) {
+			throw new GuildVerificationRequiredError('You need to claim your account to send messages in this guild.');
+		}
+		if (verificationLevel >= GuildVerificationLevel.LOW) {
+			if (!user.emailVerified) {
+				throw new GuildEmailVerificationRequiredError();
+			}
 		}
 	}
 	if (verificationLevel >= GuildVerificationLevel.MEDIUM) {
@@ -91,7 +90,6 @@ export function checkGuildVerificationWithGuildModel({
 		verificationLevel: getEffectiveGuildVerificationLevel(
 			guild.verificationLevel ?? GuildVerificationLevel.NONE,
 			guild.features.has(GuildFeatures.DISCOVERABLE),
-			Config.instance.phoneVerificationEnabled,
 		),
 		memberJoinedAt: member.joinedAt,
 		memberRoles: member.roleIds,
@@ -117,7 +115,6 @@ export function checkGuildVerificationWithResponse({
 		verificationLevel: getEffectiveGuildVerificationLevel(
 			guild.verification_level ?? GuildVerificationLevel.NONE,
 			(guild.features ?? []).includes(GuildFeatures.DISCOVERABLE),
-			Config.instance.phoneVerificationEnabled,
 		),
 		memberJoinedAt: member.joined_at,
 		memberRoles: createRoleIDSet(new Set(member.roles.map((roleId) => BigInt(roleId)))),

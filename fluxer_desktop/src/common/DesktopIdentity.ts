@@ -4,7 +4,12 @@ import {BUILD_CHANNEL} from '@electron/common/BuildChannel';
 
 export const DESKTOP_APP_NAME = BUILD_CHANNEL === 'canary' ? 'Fluxins Canary' : 'Fluxins';
 export const MACOS_BUNDLE_ID = BUILD_CHANNEL === 'canary' ? 'net.opland.fluxins.canary' : 'net.opland.fluxins';
-export const LINUX_DESKTOP_ENTRY_ID = BUILD_CHANNEL === 'canary' ? 'fluxins-canary' : 'fluxins';
+export const LINUX_DESKTOP_ENTRY_ID =
+	BUILD_CHANNEL === 'canary' ? 'net.opland.FluxinsDesktopCanary' : 'net.opland.FluxinsDesktop';
+export const LINUX_PORTAL_SESSION_TOKEN =
+	BUILD_CHANNEL === 'canary' ? 'fluxins_canary_global_shortcuts' : 'fluxins_global_shortcuts';
+export const LEGACY_LINUX_DESKTOP_ENTRY_ID = BUILD_CHANNEL === 'canary' ? 'fluxins-canary' : 'fluxins';
+export const LINUX_ICON_NAME = BUILD_CHANNEL === 'canary' ? 'fluxins-canary' : 'fluxins';
 export const WINDOWS_SHORTCUT_AUTHOR = 'Opland';
 export const WINDOWS_VELOPACK_ID = BUILD_CHANNEL === 'canary' ? 'fluxins_desktop_canary' : 'fluxins_desktop';
 export const WINDOWS_LEGACY_SQUIRREL_ID = 'fluxins_app';

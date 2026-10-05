@@ -25,6 +25,7 @@ const MINIMAL_ENV: Record<string, string> = {
 	FLUXER_GATEWAY_RPC_AUTH_TOKEN: 'test-gateway-token',
 	FLUXER_SUDO_MODE_SECRET: 'test-sudo-secret',
 	FLUXER_CONNECTION_INITIATION_SECRET: 'test-connection-secret',
+	FLUXER_PROFILE_PSEUDONYM_SECRET: 'test-profile-pseudonym-secret',
 	FLUXER_VAPID_PUBLIC_KEY: 'BB76bTFIuoqmxJtTfZX0yGTn1f_qu9H03B_nkj8OyExJFkN7Y-HBZZzShnHZoEhXKc5ZRy3jFu7OkBbnaQG-4aw',
 	FLUXER_VAPID_PRIVATE_KEY: 'Xgi-3P8J-I3Q6U1HlCcXMuc_tKLGAM9nIfznX3Hz68o',
 };
@@ -290,6 +291,30 @@ describe('ConfigLoader', () => {
 		expect(config.services.api.storage_change_feed?.skip_buckets).toBeUndefined();
 	});
 
+	test('reads the email reply-to address', async () => {
+		stubMinimalEnv({FLUXER_EMAIL_REPLY_TO_EMAIL: 'support@example.com'});
+
+		const config = await loadConfig();
+
+		expect(config.integrations.email.reply_to_email).toBe('support@example.com');
+	});
+
+	test('leaves the email reply-to address empty when unset or blank', async () => {
+		stubMinimalEnv({FLUXER_EMAIL_REPLY_TO_EMAIL: ' '});
+
+		const config = await loadConfig();
+
+		expect(config.integrations.email.reply_to_email).toBe('');
+	});
+
+	test.each(['support', 'Support <support@example.com>', 'a@example.com,b@example.com', ' support@example.com'])(
+		'rejects %j as the email reply-to address',
+		async (value) => {
+			stubMinimalEnv({FLUXER_EMAIL_REPLY_TO_EMAIL: value});
+			await expect(loadConfig()).rejects.toThrow('FLUXER_EMAIL_REPLY_TO_EMAIL must be a single email address');
+		},
+	);
+
 	test('keeps explicit passkey relying party values', async () => {
 		stubMinimalEnv({
 			FLUXER_BASE_DOMAIN: 'chat.example.com',
@@ -451,6 +476,25 @@ describe('ConfigLoader', () => {
 		await expect(loadConfig()).rejects.toThrow('Invalid FLUXER_KV_MODE: sentinel');
 	});
 
+	test('reads the profile pseudonym secret and requires it in production', async () => {
+		stubMinimalEnv();
+		expect((await loadConfig()).auth.profile_pseudonym_secret).toBe('test-profile-pseudonym-secret');
+		resetConfig();
+		stubMinimalEnv({FLUXER_PROFILE_PSEUDONYM_SECRET: ''});
+		expect((await loadConfig()).auth.profile_pseudonym_secret).toBe('fluxer-dev-profile-pseudonym-secret');
+		resetConfig();
+		stubMinimalEnv({
+			FLUXER_ENV: 'production',
+			FLUXER_POSTGRES_HOST: 'postgres.internal',
+			FLUXER_POSTGRES_DATABASE: 'fluxer_prod',
+			FLUXER_POSTGRES_USERNAME: 'fluxer_app',
+			FLUXER_POSTGRES_PASSWORD: 'prod-postgres-secret',
+			FLUXER_POSTGRES_SSL: 'true',
+			FLUXER_PROFILE_PSEUDONYM_SECRET: '',
+		});
+		await expect(loadConfig()).rejects.toThrow('FLUXER_PROFILE_PSEUDONYM_SECRET is required');
+	});
+
 	test('rejects unsafe production Postgres defaults', async () => {
 		stubMinimalEnv({FLUXER_ENV: 'production'});
 		await expect(loadConfig()).rejects.toThrow('FLUXER_POSTGRES_HOST');
@@ -538,6 +582,48 @@ describe('ConfigLoader', () => {
 			status_page_incident_history_url: 'https://status.example/history',
 		});
 		expect(config.instance.setup.configured).toBe(true);
+	});
+
+	test('leaves the account identity unset by default', async () => {
+		stubMinimalEnv();
+		const config = await loadConfig();
+		expect(config.instance.account_identity).toBeNull();
+	});
+
+	test('treats an empty account identity as unset', async () => {
+		stubMinimalEnv({FLUXER_ACCOUNT_IDENTITY: ' '});
+		const config = await loadConfig();
+		expect(config.instance.account_identity).toBeNull();
+	});
+
+	test.each([
+		['email', 'email'],
+		['username', 'username'],
+		[' Username ', 'username'],
+	])('parses FLUXER_ACCOUNT_IDENTITY=%j', async (raw, expected) => {
+		stubMinimalEnv({FLUXER_ACCOUNT_IDENTITY: raw});
+		const config = await loadConfig();
+		expect(config.instance.account_identity).toBe(expected);
+	});
+
+	test.each([
+		['none', 'none'],
+		[' Random ', 'random'],
+		['', null],
+	])('parses FLUXER_TAG_STYLE=%j', async (raw, expected) => {
+		stubMinimalEnv({FLUXER_TAG_STYLE: raw});
+		const config = await loadConfig();
+		expect(config.instance.tag_style).toBe(expected);
+	});
+
+	test.each(['sequential', 'zero_first'])('rejects the tag style %j', async (raw) => {
+		stubMinimalEnv({FLUXER_TAG_STYLE: raw});
+		await expect(loadConfig()).rejects.toThrow('FLUXER_TAG_STYLE must be none or random');
+	});
+
+	test('rejects an unknown account identity', async () => {
+		stubMinimalEnv({FLUXER_ACCOUNT_IDENTITY: 'phone'});
+		await expect(loadConfig()).rejects.toThrow('FLUXER_ACCOUNT_IDENTITY must be email or username');
 	});
 
 	test('leaves both stores off with no apps, packages or products by default', async () => {
@@ -668,7 +754,7 @@ describe('ConfigLoader', () => {
 		}
 	});
 
-	test('rejects a cache purge endpoint that carries credentials', async () => {
+	test('rejects a cache purge endpoint that contains credentials', async () => {
 		stubMinimalEnv({
 			FLUXER_CACHE_PURGE_ADAPTER: 'http',
 			FLUXER_CACHE_PURGE_HTTP_ENDPOINT: 'https://purger:secret@purge.internal/purge',
@@ -845,7 +931,7 @@ describe('ConfigLoader', () => {
 		expect(config.integrations.voice.url).toBe('http://localhost:8088/livekit');
 	});
 
-	test('inserts the public port into every other public url the config carries', async () => {
+	test('inserts the public port into every other public url the config contains', async () => {
 		stubMinimalEnv({
 			FLUXER_S3_PUBLIC_ENDPOINT: 'http://localhost/s3',
 			FLUXER_EMAIL_APP_BASE_URL: 'http://localhost',

@@ -16,6 +16,7 @@ const appId = isCanary ? 'net.opland.fluxins.canary' : 'net.opland.fluxins';
 const iconDir = isCanary ? 'icons-canary' : 'icons-stable';
 const packageName = isCanary ? 'fluxins_desktop_canary' : 'fluxins_desktop';
 const linuxPackageName = isCanary ? 'fluxins-canary' : 'fluxins';
+const linuxDesktopId = isCanary ? 'net.opland.FluxinsDesktopCanary' : 'net.opland.FluxinsDesktop';
 const linuxDesktopActionIds = ['open-settings', 'new-dm'];
 const linuxDesktopActionList = `${linuxDesktopActionIds.join(';')};`;
 const linuxGlibcBaseline = Object.freeze({major: 2, minor: 35, patch: 0, name: 'GLIBC_2.35'});
@@ -344,7 +345,7 @@ const linuxDesktopEntry = {
 	Comment: isCanary ? 'Canary build of Fluxins' : 'Instant messaging and VoIP',
 	Keywords: 'chat;im;messaging;messenger;voip;voice;video;call;',
 	Categories: 'Network;InstantMessaging;Chat;',
-	StartupWMClass: linuxPackageName,
+	StartupWMClass: linuxDesktopId,
 	StartupNotify: 'true',
 	SingleMainWindow: 'true',
 	MimeType: 'x-scheme-handler/fluxins;',
@@ -1499,7 +1500,7 @@ module.exports = {
 		main: 'dist/main/index.js',
 		name: metadataName,
 		...(process.env.VERSION ? {version: process.env.VERSION} : {}),
-		...(targetPlatform === 'linux' ? {desktopName: `${linuxPackageName}.desktop`} : {}),
+		...(targetPlatform === 'linux' ? {desktopName: `${linuxDesktopId}.desktop`} : {}),
 	},
 	extraResources: [
 		{

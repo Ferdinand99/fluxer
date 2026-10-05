@@ -43,13 +43,13 @@ describe('buildAPIServerOptions', () => {
 		expect(server.requestTimeout).toBe(120_000);
 	});
 
-	test('carries the operator header timeout from the environment into the server', async () => {
+	test('passes the operator header timeout from the environment into the server', async () => {
 		const server = await listenWithEnv({FLUXER_API_HEADERS_TIMEOUT_MS: '45000'});
 		expect(server.headersTimeout).toBe(45_000);
 		expect(server.requestTimeout).toBe(120_000);
 	});
 
-	test('carries the operator request timeout from the environment into the server', async () => {
+	test('passes the operator request timeout from the environment into the server', async () => {
 		const server = await listenWithEnv({FLUXER_API_REQUEST_TIMEOUT_MS: '600000'});
 		expect(server.headersTimeout).toBe(30_000);
 		expect(server.requestTimeout).toBe(600_000);
@@ -134,7 +134,7 @@ describe('buildAPIConfigFromMaster stripe legacy prices', () => {
 		master = await loadConfig();
 	});
 
-	it('carries the retired stripe price map from master config onto the api config', () => {
+	it('copies the retired stripe price map from master config onto the api config', () => {
 		const legacyPrices = {
 			monthly_brl: ['price_retired_monthly_brl'],
 			yearly_brl: ['price_retired_yearly_brl_a', 'price_retired_yearly_brl_b'],
@@ -145,7 +145,7 @@ describe('buildAPIConfigFromMaster stripe legacy prices', () => {
 		);
 	});
 
-	it('carries the retired price map even when no live prices are configured', () => {
+	it('copies the retired price map even when no live prices are configured', () => {
 		const withoutPrices: MasterConfig = {
 			...master,
 			integrations: {
@@ -212,40 +212,74 @@ describe('buildAPIConfigFromMaster optional outbound lookups', () => {
 	});
 });
 
-function withPhoneVerification(master: MasterConfig, selfHosted: boolean, enabled?: boolean): MasterConfig {
-	return {
-		...master,
-		instance: {
-			...master.instance,
-			self_hosted: selfHosted,
-			phone_verification_enabled: enabled,
-		},
-	};
+async function trustedCallersFromEnv(env: Record<string, string>) {
+	for (const [key, value] of Object.entries(env)) {
+		vi.stubEnv(key, value);
+	}
+	resetConfig();
+	return buildAPIConfigFromMaster(await loadConfig()).internal.trustedCallers;
 }
 
-describe('buildAPIConfigFromMaster phone verification', () => {
-	let master: MasterConfig;
-	beforeAll(async () => {
-		master = await loadConfig();
+describe('buildAPIConfigFromMaster trusted callers', () => {
+	const bugsKey = 'b'.repeat(32);
+	const donationKey = 'd'.repeat(32);
+
+	test('reads callers from FLUXER_API_TRUSTED_CALLERS', async () => {
+		const callers = await trustedCallersFromEnv({
+			FLUXER_API_TRUSTED_CALLERS: JSON.stringify([
+				{name: 'bugs', key: bugsKey, buckets: ['oauth:token', 'oauth:revoke']},
+			]),
+		});
+		expect(callers).toEqual([{name: 'bugs', key: bugsKey, buckets: ['oauth:token', 'oauth:revoke']}]);
 	});
 
-	it('is on by default when the instance is not self-hosted', () => {
-		expect(buildAPIConfigFromMaster(withPhoneVerification(master, false)).instance.phoneVerificationEnabled).toBe(true);
+	test('turns FLUXER_API_DONATION_PROXY_KEY into a caller scoped to the donation buckets', async () => {
+		const callers = await trustedCallersFromEnv({FLUXER_API_DONATION_PROXY_KEY: donationKey});
+		expect(callers).toEqual([
+			{
+				name: 'donation',
+				key: donationKey,
+				buckets: ['donation:request_link', 'donation:manage', 'donation:checkout'],
+			},
+		]);
 	});
 
-	it('is off by default on a self-hosted instance', () => {
-		expect(buildAPIConfigFromMaster(withPhoneVerification(master, true)).instance.phoneVerificationEnabled).toBe(false);
+	test('keeps both forms side by side', async () => {
+		const callers = await trustedCallersFromEnv({
+			FLUXER_API_DONATION_PROXY_KEY: donationKey,
+			FLUXER_API_TRUSTED_CALLERS: JSON.stringify([{name: 'bugs', key: bugsKey, buckets: ['oauth:token']}]),
+		});
+		expect(callers.map((caller) => caller.name)).toEqual(['bugs', 'donation']);
 	});
 
-	it('lets a self-hosted operator switch it on', () => {
-		expect(buildAPIConfigFromMaster(withPhoneVerification(master, true, true)).instance.phoneVerificationEnabled).toBe(
-			true,
+	test('tolerates bucket names and fields this build does not know', async () => {
+		const callers = await trustedCallersFromEnv({
+			FLUXER_API_TRUSTED_CALLERS: JSON.stringify([
+				{name: 'bugs', key: bugsKey, buckets: ['oauth:token', 'future:bucket'], note: 'added later'},
+			]),
+		});
+		expect(callers).toEqual([{name: 'bugs', key: bugsKey, buckets: ['oauth:token', 'future:bucket']}]);
+	});
+
+	test('fails at boot on a short key', async () => {
+		await expect(
+			trustedCallersFromEnv({
+				FLUXER_API_TRUSTED_CALLERS: JSON.stringify([{name: 'bugs', key: 'short', buckets: ['oauth:token']}]),
+			}),
+		).rejects.toThrow('FLUXER_API_TRUSTED_CALLERS entry 1 key must be at least 32 characters');
+	});
+
+	test('fails at boot on an entry with no buckets', async () => {
+		await expect(
+			trustedCallersFromEnv({
+				FLUXER_API_TRUSTED_CALLERS: JSON.stringify([{name: 'bugs', key: bugsKey, buckets: []}]),
+			}),
+		).rejects.toThrow('FLUXER_API_TRUSTED_CALLERS entry 1 buckets must be a non-empty list of bucket names');
+	});
+
+	test('fails at boot on a value that is not a JSON array', async () => {
+		await expect(trustedCallersFromEnv({FLUXER_API_TRUSTED_CALLERS: '{"name":"bugs"}'})).rejects.toThrow(
+			'FLUXER_API_TRUSTED_CALLERS must be a JSON array',
 		);
-	});
-
-	it('lets an operator switch it off when the instance is not self-hosted', () => {
-		expect(
-			buildAPIConfigFromMaster(withPhoneVerification(master, false, false)).instance.phoneVerificationEnabled,
-		).toBe(false);
 	});
 });

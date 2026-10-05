@@ -5,6 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {BUILD_CHANNEL} from '@electron/common/BuildChannel';
 import {getDesktopWindowBehaviorSettings} from '@electron/common/DesktopConfig';
+import {DESKTOP_APP_NAME} from '@electron/common/DesktopIdentity';
 import {createChildLogger} from '@electron/common/Logger';
 import type {
 	TrayPresenceStatus as SharedTrayPresenceStatus,
@@ -19,9 +20,9 @@ import {app, type BrowserWindow, clipboard, Menu, nativeImage, Tray} from 'elect
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logger = createChildLogger('DesktopTray');
 const isCanary = BUILD_CHANNEL === 'canary';
-const APP_NAME = isCanary ? 'Fluxer Canary' : 'Fluxer';
+const APP_NAME = DESKTOP_APP_NAME;
 const ICON_DIR_NAME = isCanary ? 'icons-canary' : 'icons-stable';
-const TRAY_POSITION_GUID = isCanary ? '1a39981b-b4cc-46a4-8f7e-9fce187110f5' : '11c70c9f-a35d-4328-9040-f722dc5fa0a0';
+const TRAY_POSITION_GUID = isCanary ? '5d2c8e41-9a7b-4f13-b6e0-2c4a91f7d3a8' : 'a3f6b0d2-47c1-4e95-8b2d-6e1f0c9a5d74';
 
 interface DesktopTrayController {
 	createWindow: () => BrowserWindow;

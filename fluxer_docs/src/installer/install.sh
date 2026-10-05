@@ -14,11 +14,11 @@
 #
 # Why one script and not a separate upgrader: an upgrade needs the host checks,
 # the stack download, the readiness poll and the health probe that the install
-# already carries. A second script either copies them or drifts from them, and
+# already has. A second script either copies them or drifts from them, and
 # the operator has two downloads and two checksums to verify instead of one.
 # The modes share one contract, one digest and one set of exit codes.
 #
-# This file is also the procedure. Every step of the upgrade carries the command
+# This file is also the procedure. Every step of the upgrade includes the command
 # an operator types to do that step by hand, and the reason the step exists.
 #
 # Read this file before you run it. The default mode writes .env, which holds
@@ -86,7 +86,7 @@ FLUXER_DUMP_FILE='fluxer.dump'
 # with it.
 FLUXER_VOLUME_HEADROOM=110
 
-# The keys .env carries, in the order they are written. The installer iterates
+# The keys .env holds, in the order they are written. The installer iterates
 # these two lists, so a key that leaves a list is a key the installer stops
 # writing. The docs CI parses the same text and compares it against
 # deploy/self-hosting/.env.example.
@@ -110,6 +110,7 @@ MEILI_MASTER_KEY hex
 FLUXER_S3_SECRET_KEY hex
 FLUXER_SUDO_MODE_SECRET hex
 FLUXER_CONNECTION_INITIATION_SECRET hex
+FLUXER_PROFILE_PSEUDONYM_SECRET hex
 FLUXER_GATEWAY_RPC_AUTH_TOKEN hex
 FLUXER_ERLANG_COOKIE hex
 FLUXER_MEDIA_PROXY_SECRET_KEY hex
@@ -203,13 +204,13 @@ VOLUMES
 
 fluxer_usage() {
 	cat <<'USAGE'
-Usage: sh install.sh --domain <host> --email <address> [options]
+Usage: sh install.sh --domain <host> [options]
        sh install.sh --update [options]
        sh install.sh --rollback [options]
 
 Options:
   --domain <host>          Hostname the instance answers on. Prompted when absent.
-  --email <address>        Contact email for web push. Prompted when absent.
+  --email <address>        Contact email for web push. Default admin@<domain>.
   --engine <command>       Container engine to drive. Default docker, or podman
                            when docker is absent.
   --dir <path>             Working directory. Default ~/fluxer, or the working
@@ -449,8 +450,12 @@ fluxer_docker_hint() {
 		printf '%s' 'On Debian and Ubuntu, follow https://docs.docker.com/engine/install/ and install docker-ce with docker-compose-plugin. The distribution docker.io package ships no Compose plugin.'
 		return 0
 	fi
+	if grep -qE '^ID="?fedora"?$' /etc/os-release 2>/dev/null; then
+		printf '%s' 'On Fedora, install Podman and Docker Compose with dnf install -y podman docker-compose, then start the Podman API socket with systemctl --user enable --now podman.socket. podman compose runs docker-compose ahead of podman-compose, which lacks commands this script runs.'
+		return 0
+	fi
 	if command -v dnf >/dev/null 2>&1; then
-		printf '%s' 'On Fedora, RHEL and derivatives, follow https://docs.docker.com/engine/install/ and install docker-ce with docker-compose-plugin.'
+		printf '%s' 'On RHEL and derivatives, follow https://docs.docker.com/engine/install/ and install docker-ce with docker-compose-plugin.'
 		return 0
 	fi
 	if command -v zypper >/dev/null 2>&1; then
@@ -553,6 +558,9 @@ fluxer_preflight() {
 	if ! $fluxer_engine compose version >/dev/null 2>&1; then
 		fluxer_fail 2 "$fluxer_engine has no compose subcommand. $(fluxer_docker_hint)"
 	fi
+	if $fluxer_engine compose version 2>/dev/null | grep -q '^podman-compose version'; then
+		fluxer_fail 2 "$fluxer_engine compose runs podman-compose, which lacks compose ps -a and compose config --images that this script runs. $(fluxer_docker_hint)"
+	fi
 	fluxer_engine_report=$($fluxer_engine --version 2>/dev/null)
 	fluxer_engine_kind=$(printf '%s\n' "$fluxer_engine_report" | sed -n 's/^\([A-Za-z][A-Za-z]*\) version .*/\1/p' | tr 'A-Z' 'a-z')
 	fluxer_engine_version=$(printf '%s\n' "$fluxer_engine_report" | sed -n 's/^[A-Za-z][A-Za-z]* version v\{0,1\}\([0-9][0-9.]*\).*/\1/p')
@@ -654,15 +662,10 @@ fluxer_resolve_values() {
 		fluxer_prompt 'Hostname the instance answers on' || fluxer_fail 1 'No hostname given.'
 		opt_domain=$fluxer_prompt_value
 	fi
-	if [ -z "$opt_email" ]; then
-		if [ "$opt_non_interactive" -eq 1 ] || [ "$opt_dry_run" -eq 1 ] || [ ! -t 0 ]; then
-			fluxer_bad_usage '--email is required.'
-		fi
-		fluxer_prompt 'Contact email for web push' || fluxer_fail 1 'No address given.'
-		opt_email=$fluxer_prompt_value
-	fi
 	fluxer_valid_domain "$opt_domain" || fluxer_bad_usage "--domain $opt_domain is not a lowercase hostname. Give a bare hostname such as chat.example.com."
-	fluxer_valid_email "$opt_email" || fluxer_bad_usage "--email $opt_email is not an address."
+	if [ -n "$opt_email" ]; then
+		fluxer_valid_email "$opt_email" || fluxer_bad_usage "--email $opt_email is not an address."
+	fi
 }
 
 fluxer_validate_options() {
@@ -738,9 +741,15 @@ fluxer_print_plan() {
 		fluxer_say "  edge bind     $opt_edge_bind"
 	fi
 	fluxer_say "  domain        $opt_domain"
-	fluxer_say "  email         $opt_email"
+	fluxer_plan_non_secret=$(fluxer_non_secret_keys | wc -l | tr -d ' ')
+	if [ -n "$opt_email" ]; then
+		fluxer_say "  email         $opt_email"
+	else
+		fluxer_say "  email         admin@$opt_domain, derived by compose"
+		fluxer_plan_non_secret=$((fluxer_plan_non_secret - 1))
+	fi
 	fluxer_say '  action        download the stack files, write .env, start the stack'
-	fluxer_say "  .env keys     $(fluxer_non_secret_keys | wc -l | tr -d ' ') non-secret values and $(fluxer_secret_keys | wc -l | tr -d ' ') secrets"
+	fluxer_say "  .env keys     $fluxer_plan_non_secret non-secret values and $(fluxer_secret_keys | wc -l | tr -d ' ') secrets"
 	fluxer_say '  files         docker-compose.yml docker-compose.proxy.yml tunnel.compose.yml Caddyfile .env.example'
 	if [ -e "$opt_dir/.env" ]; then
 		fluxer_say "  note          $opt_dir/.env exists. A run without --update refuses it."
@@ -794,7 +803,7 @@ fluxer_fetch_stack() {
 # upgrade refreshes them itself.
 #
 # A refreshed docker-compose.yml can declare a variable the running .env does not
-# carry. Compose writes ${NAME:?message} for a variable the stack requires and
+# define. Compose writes ${NAME:?message} for a variable the stack requires and
 # stops with that message until .env sets it, and ${NAME:-default} for one that
 # needs nothing from the operator. Every optional override ships commented out in
 # .env.example, so a new required key is the only kind that asks for an edit.
@@ -889,11 +898,12 @@ fluxer_generate_vapid() {
 #   cp .env.example .env
 #   chmod 600 .env
 #
-# Then set FLUXER_DOMAIN and FLUXER_VAPID_EMAIL, the two values only the
-# operator knows. The five other non-secret keys in the list above ship correct
-# in .env.example and need no edit.
+# Then set FLUXER_DOMAIN, the one value only the operator knows. FLUXER_VAPID_EMAIL
+# is optional, and compose derives admin@FLUXER_DOMAIN while it is unset. The five
+# other non-secret keys in the list above ship correct in .env.example and need no
+# edit.
 #
-# Every secret in .env.example carries the literal CHANGE_ME. A key whose name
+# Every secret in .env.example contains the literal CHANGE_ME. A key whose name
 # ends in _BASE64 takes openssl rand -base64 32, every other key takes
 # openssl rand -hex 32, and the VAPID pair comes from the generator above.
 #
@@ -910,7 +920,10 @@ fluxer_write_env() {
 		[ -n "$fluxer_key" ] || continue
 		case $fluxer_kind in
 			domain) fluxer_value=$opt_domain ;;
-			email) fluxer_value=$opt_email ;;
+			email)
+				[ -n "$opt_email" ] || continue
+				fluxer_value=$opt_email
+				;;
 			image_tag) fluxer_value=$opt_image_tag ;;
 			literal) fluxer_value=$fluxer_literal ;;
 			*) fluxer_fail 5 "Unknown non-secret kind $fluxer_kind for $fluxer_key." ;;
@@ -1112,6 +1125,7 @@ fluxer_upgrade_secret_keys() {
 	cat <<'KEYS'
 FLUXER_ERLANG_COOKIE hex
 FLUXER_MEDIA_PROXY_UPLOAD_RELAY_SECRET_BASE64 base64
+FLUXER_PROFILE_PSEUDONYM_SECRET hex
 KEYS
 }
 
@@ -1405,7 +1419,7 @@ $(fluxer_indent_file "$fluxer_scratch/inspect-err" '  ')"
 	sort -u "$fluxer_scratch/inspected"
 }
 
-# The recorded ID for one reference, or nothing when no container carries it.
+# The recorded ID for one reference, or nothing when no container uses it.
 fluxer_recorded_id_for() {
 	awk -v fluxer_want="$1" '$1 == fluxer_want {print $2; exit}' "$fluxer_scratch/running"
 }
@@ -1420,7 +1434,7 @@ fluxer_recorded_id_for() {
 #
 # The reference list comes from Compose and the ID under each reference comes
 # from the container running it, for the reason in fluxer_running_image_ids. A
-# reference no container carries is recorded as `-`, which a rollback skips,
+# reference no container uses is recorded as `-`, which a rollback skips,
 # because a version that was not running is not a version to go back to.
 #
 # By hand:
@@ -1763,7 +1777,7 @@ fluxer_prepare_record() {
 	mkdir -m 700 "$fluxer_record"
 }
 
-# Record names carry a UTC stamp, so the shell expands the glob in byte order
+# Record names include a UTC stamp, so the shell expands the glob in byte order
 # and the last match is the most recent upgrade.
 fluxer_newest_record() {
 	fluxer_newest=''
@@ -2001,7 +2015,7 @@ fluxer_set_image_tag() {
 #
 # Two shapes, depending on what the upgrade moved:
 #
-#   A pinned tag moved, so the old images still carry their own tag. The tag goes
+#   A pinned tag moved, so the old images still have their own tag. The tag goes
 #   back into .env and Compose finds them.
 #
 #     By hand: set FLUXER_IMAGE_TAG back, then docker compose up -d
