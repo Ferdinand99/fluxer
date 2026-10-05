@@ -49,8 +49,10 @@ import type {Message} from '@app/api/models/Message';
 import type {MessageSnapshot} from '@app/api/models/MessageSnapshot';
 import type {User} from '@app/api/models/User';
 import type {Webhook} from '@app/api/models/Webhook';
+import {assertAccountNotLimited} from '@app/api/user/AccountLimit';
 import type {IUserRepository} from '@app/api/user/IUserRepository';
-import {isDirectDeliverySuppressed} from '@app/api/user/UserHelpers';
+import {assertMayStartConversation} from '@app/api/user/NewConversationLimit';
+import {isContentHidden, isDirectDeliverySuppressed} from '@app/api/user/UserHelpers';
 import {assertGuildMemberCanCommunicate} from '@app/api/utils/GuildCommunicationUtils';
 import {
 	ChannelTypes,
@@ -788,6 +790,7 @@ export class MessageSendService {
 			const message = await this.sendPersonalNoteMessage({authChannel, user, channelId, data, requestCache});
 			return {message, authChannel};
 		}
+		assertAccountNotLimited(user);
 		const {channel, guild, checkPermission, hasPermission, member} = authChannel;
 		const {canEmbedLinks, canMentionEveryone, canAttachFiles} = await this.checkMessageSendPermissions({
 			guild,
@@ -855,6 +858,16 @@ export class MessageSendService {
 			}
 		}
 		this.ensureForwardGuildMatches({data, referencedChannelGuildId});
+		const dmRecipientId = this.getOneToOneDmRecipientId(channel, user.id);
+		if (dmRecipientId !== null) {
+			await assertMayStartConversation({
+				user,
+				targetId: dmRecipientId,
+				users: this.deps.userRepository,
+				messages: this.deps.channelRepository.messages,
+				channel,
+			});
+		}
 		await this.ensureAttachmentsExist({
 			attachments: data.attachments,
 			user,
@@ -928,8 +941,8 @@ export class MessageSendService {
 				});
 			}
 		}
-		const dmRecipientId = this.getOneToOneDmRecipientId(channel, user.id);
 		const suppressDmRecipientDelivery = dmRecipientId !== null && isDirectDeliverySuppressed(user);
+		const suppressDelivery = suppressDmRecipientDelivery || isContentHidden(user, messageId);
 		const channelHadMessages = channel.lastMessageId !== null;
 		const {message, enqueueDeferredEmbeds} = await this.deps.persistenceService.createMessage({
 			messageId,
@@ -961,7 +974,7 @@ export class MessageSendService {
 			messageId,
 			mentionChannels: mentionData?.mentionChannels,
 		});
-		if (!suppressDmRecipientDelivery) {
+		if (!suppressDelivery) {
 			await this.settlePostCreateWork(messageId, [
 				{
 					step: 'update_dm_recipients',
@@ -988,7 +1001,7 @@ export class MessageSendService {
 		await this.settlePostCreateWork(messageId, [
 			{
 				step: 'dispatch',
-				promise: suppressDmRecipientDelivery
+				promise: suppressDelivery
 					? this.deps.dispatchService.dispatchMessageCreateToUser({
 							channel,
 							message,
@@ -1019,7 +1032,7 @@ export class MessageSendService {
 			guildOwnerId: guild?.owner_id ? createUserID(BigInt(guild.owner_id)) : null,
 			dmRecipientId,
 			channelHadMessages,
-			delivered: !suppressDmRecipientDelivery,
+			delivered: !suppressDelivery,
 			userRepository: this.deps.userRepository,
 		});
 		void enqueueDeferredEmbeds().catch((error) => {

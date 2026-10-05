@@ -7,9 +7,7 @@ export const ERROR_I18N_MESSAGES = {
 	'account.email_verification_required': 'Email verification is required for this action.',
 	'account.guild_verification_required': 'Community verification is required.',
 	'account.ip_authorization_required': 'IP authorization is required.',
-	'account.locked_suspicious_activity': 'Your account is locked due to suspicious activity.',
-	'account.phone_gate_escape_unavailable': 'This account cannot postpone the phone verification check.',
-	'account.phone_required_for_guild': 'You need to add a phone number to send messages in this community.',
+	'account.limited': 'Messaging is paused on your account. Check your email for a quick step to continue.',
 	'account.sensitive_content_filter_age_restricted':
 		"This sensitive content filter isn't available for your age group.",
 	'account.session_timeout': 'Session timed out. Refresh the page and log in again.',
@@ -34,7 +32,6 @@ export const ERROR_I18N_MESSAGES = {
 	'admin_and_system.guild_id_required_for_search_index':
 		'Community ID is required for channel message and member search indexes.',
 	'admin_and_system.invalid_integer_format': 'Invalid integer format.',
-	'admin_and_system.invalid_suspicious_flags_format': 'Invalid suspicious flags format.',
 	'admin_and_system.invalid_system_flag': 'Invalid system flag.',
 	'admin_and_system.invalid_timeout_value': 'Invalid timeout value.',
 	'admin_and_system.invalid_timestamp': 'Invalid timestamp.',
@@ -46,9 +43,7 @@ export const ERROR_I18N_MESSAGES = {
 	'admin_and_system.resource_locked': 'This resource is being modified. Please try again shortly.',
 	'admin_and_system.test_harness_disabled': 'Test harness is disabled.',
 	'admin_and_system.test_harness_forbidden': 'Test harness is forbidden.',
-	'admin_and_system.unknown_suspicious_flag': 'Unknown suspicious flag.',
 	'admin_and_system.update_failed': "We couldn't update the resource. Please try again.",
-	'admin_and_system.user_must_be_bot_for_system_user': 'User must be a bot to be marked as a system user.',
 	'age_verification.already_verified': "You've already completed age verification.",
 	'attachments_and_uploads.attachment_fields_required':
 		'`attachment_id`, `channel_id`, `message_id`, and `expires_at` are required.',
@@ -137,9 +132,16 @@ export const ERROR_I18N_MESSAGES = {
 	'auth_and_oauth.unknown_origin_handoff': 'This sign-in transfer has expired or was already used.',
 	'auth_and_oauth.unknown_passkey_bridge': 'This passkey request has expired. Try again.',
 	'auth_and_oauth.unknown_passkey_migration': 'There is no passkey to update right now.',
+	'auth_and_registration.account_identity_locked': "The sign-in method is already set and can't be changed.",
+	'auth_and_registration.instance_address_required':
+		'This instance uses usernames. Enter the username you want followed by @{host}.',
+	'auth_and_registration.invalid_login_or_password': 'Invalid username or password.',
+	'auth_and_registration.invalid_recovery_key': 'Invalid username or recovery key.',
 	'auth_and_registration.password_is_too_common':
 		'Your password is too common. Please choose a less predictable password.',
 	'auth_and_registration.password_not_set': "Password isn't set.",
+	'auth_and_registration.username_sign_in_only':
+		'This is only available on instances where people sign in with a username.',
 	'bots.bot_discriminator_cannot_be_changed': "Bot discriminator can't be changed.",
 	'bots.bot_is_private': 'This bot is private.',
 	'bots.bot_user_generation_failed': 'Bot user generation failed.',
@@ -295,6 +297,7 @@ export const ERROR_I18N_MESSAGES = {
 	'email.original_email_must_be_verified_first': 'Original email must be verified first.',
 	'email.original_verification_not_required': "Original verification isn't required for this flow.",
 	'email.token_expired': 'Email token expired.',
+	'email.unavailable_on_instance': "This instance doesn't use email.",
 	'email.user_has_no_email_address': "This user doesn't have an email address.",
 	'email.user_is_not_pending_verification': "This user isn't pending verification.",
 	'email.verification_code_expired': 'Verification code has expired.',
@@ -309,6 +312,7 @@ export const ERROR_I18N_MESSAGES = {
 	'feature_flags.feature_temporarily_disabled': 'This feature is temporarily disabled.',
 	'friends_and_dms.already_friends': "You're already friends with this user.",
 	'friends_and_dms.direct_messages_disabled': 'Direct messages and friend requests are disabled on this instance.',
+	'friends_and_dms.new_conversations_limited': "You can't start new conversations right now. Please try again later.",
 	'friends_and_dms.at_least_one_recipient_required': 'At least one recipient is required.',
 	'friends_and_dms.at_least_one_recipient_required_to_seed_private_channels':
 		'At least one recipient is required to seed private channels.',
@@ -450,7 +454,7 @@ export const ERROR_I18N_MESSAGES = {
 	'permissions.global_ip_banned':
 		'Your IP address {ipAddress} has been permanently blocked from the Fluxer API by platform administrators. If you believe this is a mistake, contact support@fluxer.app to appeal. Include this IP address in your appeal.',
 	'permissions.global_ip_temporarily_banned':
-		'Your IP address {ipAddress} has been temporarily blocked from the Fluxer API for 24 hours because of abusive or unusual access patterns. We usually do not provide appeals for temporary API bans. Change IP addresses or wait for the ban to expire, and review the Fluxer API access patterns coming from your client.',
+		'Your IP address {ipAddress} has been temporarily blocked from the Fluxer API. The block lifts on its own when it expires. If you think this is a mistake, contact support@fluxer.com and include this IP address.',
 	'permissions.missing_access': "You don't have access to this resource or feature.",
 	'permissions.missing_permissions': "You don't have the permissions required to perform this action.",
 	'permissions.user_banned_from_guild': 'This user is banned from this community.',
@@ -458,24 +462,6 @@ export const ERROR_I18N_MESSAGES = {
 	'permissions.user_not_in_channel': "This user isn't in the channel.",
 	'permissions.user_not_in_voice': "This user isn't in voice.",
 	'permissions.user_owns_guilds': 'This user owns communities.',
-	'phone.add_not_eligible': 'You are not eligible to add a phone number to your account.',
-	'phone.country_not_supported':
-		"We don't send verification texts to this country. Use a mobile number from another country, or email support@fluxer.app and a person will review your account.",
-	'phone.inbound_verification_required':
-		'This number is verified by texting us instead of us texting you. Start phone verification again to get the code and the number to text.',
-	'phone.invalid_number': 'Invalid phone number.',
-	'phone.lookup_unavailable':
-		'Our phone number check is down right now, so we stopped before sending your code. This is on us, not your number. Wait a few minutes and try the same number again.',
-	'phone.number_already_used': 'Phone number is already in use.',
-	'phone.number_format_required': 'Phone number must be in E.164 format (for example, +1234567890).',
-	'phone.number_not_in_service':
-		"Your carrier says this number isn't in service. Check the number and try again, or email support@fluxer.app if it's correct.",
-	'phone.number_not_mobile':
-		"This isn't a mobile number, so it can't receive our text. Use a mobile number, or email support@fluxer.app if you think that's wrong.",
-	'phone.verification_code_invalid': 'Invalid phone verification code.',
-	'phone.verification_needs_review':
-		"We couldn't verify this number automatically. Email support@fluxer.app and a person will review your account.",
-	'phone.verification_required': 'Phone verification is required.',
 	'premium_and_plans.animated_avatars_require_premium': 'Animated avatars require Premium.',
 	'premium_and_plans.banners_require_premium': 'Banners require Premium.',
 	'premium_and_plans.bio_requires_premium_for_length': 'A bio longer than {maxLength} characters requires Premium.',
@@ -501,7 +487,6 @@ export const ERROR_I18N_MESSAGES = {
 	'rate_limits.ip_authorization_resend_limit_exceeded': 'IP authorization resend limit exceeded.',
 	'rate_limits.message_crosspost_rate_limited':
 		'This channel has reached its publishing limit. It can publish 10 messages in a row, then one more every 6 minutes.',
-	'rate_limits.phone_rate_limit_exceeded': 'Phone rate limit exceeded.',
 	'rate_limits.pronouns_changed_too_often':
 		"You've changed your pronouns too often recently. Please try again in {minutes, plural, one {# minute} other {# minutes}}.",
 	'rate_limits.published_message_edit_rate_limited':
@@ -565,6 +550,9 @@ export const ERROR_I18N_MESSAGES = {
 	'urls.url_length_invalid': 'URL must be between {min} and {max} characters.',
 	'urls.url_not_publicly_routable': 'URL must resolve to a publicly routable address.',
 	'usernames_and_tags.discriminator_invalid_format': 'Discriminator must be {min}–{max} digits.',
+	'usernames_and_tags.tag_style_requires_email_sign_in': 'Tags are only available when people sign in with email.',
+	'usernames_and_tags.discriminator_not_supported_on_instance':
+		"This instance doesn't use tags. Your username is unique on its own.",
 	'usernames_and_tags.discriminator_out_of_range': 'Discriminator must be between {min} and {max}.',
 	'usernames_and_tags.discriminator_required': 'Discriminator is required.',
 	'usernames_and_tags.display_name_length_invalid': 'Display name must be between {min} and {max} characters.',
@@ -578,6 +566,7 @@ export const ERROR_I18N_MESSAGES = {
 		'There are too many users with this username. Try a different username.',
 	'usernames_and_tags.unclaimed_accounts_can_only_set_email_via_token':
 		'Unclaimed accounts can only set an email address using a token.',
+	'usernames_and_tags.username_already_taken': 'This username is already taken.',
 	'usernames_and_tags.username_invalid_characters':
 		'Username can only contain Latin letters (a-z, A-Z), numbers (0-9), and underscores (_).',
 	'usernames_and_tags.username_length_invalid': 'Username must be between {min} and {max} characters.',

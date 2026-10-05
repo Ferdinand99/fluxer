@@ -37,6 +37,7 @@ import {
 } from '@fluxer/schema/src/domains/admin/AdminSchemas';
 import {DomainMigrationConfigSchema} from '@fluxer/schema/src/domains/admin/DomainMigrationSchemas';
 import {GatewayRolloutConfigSchema} from '@fluxer/schema/src/domains/admin/GatewayRolloutSchemas';
+import {PlutoniumPageConfigSchema} from '@fluxer/schema/src/domains/admin/PlutoniumPageSchemas';
 import type {PushRelayConfig, PushRelayConfigUpdateRequest} from '@fluxer/schema/src/domains/admin/PushRelaySchemas';
 import {UserIdParam} from '@fluxer/schema/src/domains/common/CommonParamSchemas';
 import {ExperimentDeliveryConfigSchema} from '@fluxer/schema/src/domains/experiment/ExperimentSchemas';
@@ -66,6 +67,7 @@ async function buildInstanceConfigResponse(): Promise<InstanceConfigResponse> {
 		gatewayRollout,
 		pushRelay,
 		domainMigration,
+		plutoniumPage,
 		captcha,
 		experimentDelivery,
 		registrationConfig,
@@ -76,20 +78,24 @@ async function buildInstanceConfigResponse(): Promise<InstanceConfigResponse> {
 		instanceConfigRepository.getGatewayRolloutConfig(),
 		instanceConfigRepository.getPushRelayConfig(),
 		instanceConfigRepository.getDomainMigrationConfig(),
+		instanceConfigRepository.getPlutoniumPageConfig(),
 		instanceConfigRepository.getCaptchaConfig(),
 		instanceConfigRepository.getExperimentDeliveryConfig(),
 		instanceConfigRepository.getRegistrationConfig(),
 		instanceConfigRepository.getRegistrationUrlsForAdmin(),
 		instanceConfigRepository.getPendingRegistrations(),
 	]);
-	const [appPublic, policy, resolvedServices, integrations, media, billing] = await Promise.all([
-		instanceConfigRepository.getAppPublicConfig(),
-		instanceConfigRepository.getInstancePolicyConfig(),
-		instanceConfigRepository.getResolvedServicesConfig(),
-		instanceConfigRepository.getInstanceIntegrationsAdminConfig(),
-		instanceConfigRepository.getInstanceMediaAdminConfig(),
-		instanceConfigRepository.getInstanceBillingAdminConfig(),
-	]);
+	const [appPublic, policy, resolvedServices, integrations, media, billing, accountIdentity, accountIdentityLocked] =
+		await Promise.all([
+			instanceConfigRepository.getAppPublicConfig(),
+			instanceConfigRepository.getInstancePolicyConfig(),
+			instanceConfigRepository.getResolvedServicesConfig(),
+			instanceConfigRepository.getInstanceIntegrationsAdminConfig(),
+			instanceConfigRepository.getInstanceMediaAdminConfig(),
+			instanceConfigRepository.getInstanceBillingAdminConfig(),
+			instanceConfigRepository.getAccountIdentity(),
+			instanceConfigRepository.isAccountIdentityLocked(),
+		]);
 	return {
 		sso: {
 			enabled: ssoConfig.enabled,
@@ -110,6 +116,7 @@ async function buildInstanceConfigResponse(): Promise<InstanceConfigResponse> {
 		gateway_rollout: gatewayRollout,
 		push_relay: pushRelay,
 		domain_migration: domainMigration,
+		plutonium_page: plutoniumPage,
 		captcha,
 		experiment_delivery: experimentDelivery,
 		registration: {
@@ -118,6 +125,11 @@ async function buildInstanceConfigResponse(): Promise<InstanceConfigResponse> {
 			pending_registrations: pendingRegistrations,
 		},
 		self_hosted: Config.instance.selfHosted,
+		account_identity: {
+			mode: accountIdentity.mode,
+			locked: accountIdentityLocked,
+			tag_style: accountIdentity.tagStyle,
+		},
 		app_public: appPublic,
 		policy: {
 			single_community_enabled: policy.single_community_enabled,
@@ -381,6 +393,18 @@ export function InstanceConfigAdminController(app: HonoApp) {
 				if (Object.keys(patch).length > 0) {
 					await instanceConfigRepository.updateDomainMigrationConfig((current) =>
 						DomainMigrationConfigSchema.parse({
+							...current,
+							...patch,
+							config_version: current.config_version + 1,
+						}),
+					);
+				}
+			}
+			if (data.plutonium_page) {
+				const patch = omitUndefinedFields(data.plutonium_page);
+				if (Object.keys(patch).length > 0) {
+					await instanceConfigRepository.updatePlutoniumPageConfig((current) =>
+						PlutoniumPageConfigSchema.parse({
 							...current,
 							...patch,
 							config_version: current.config_version + 1,

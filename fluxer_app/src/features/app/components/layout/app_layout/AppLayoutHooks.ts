@@ -18,11 +18,14 @@ import Channels from '@app/features/channel/state/Channels';
 import DeveloperOptions from '@app/features/devtools/state/DeveloperOptions';
 import GatewayConnection from '@app/features/gateway/transport/GatewayConnection';
 import * as NotificationUtils from '@app/features/notification/utils/NotificationUtils';
-import NativePermission from '@app/features/permissions/system/state/NativePermission';
 import {resolvePriceAnnouncementCampaign} from '@app/features/premium/config/PriceAnnouncementCampaign';
 import PremiumState from '@app/features/premium/state/PremiumState';
 import {getPremiumGraceEndDate} from '@app/features/premium/utils/PremiumGrace';
-import {canServiceStripeSubscriptions, shouldShowPremiumFeatures} from '@app/features/premium/utils/PremiumUtils';
+import {
+	canServiceStripeSubscriptions,
+	getStoreOwnedSubscription,
+	shouldShowPremiumFeatures,
+} from '@app/features/premium/utils/PremiumUtils';
 import StreamerMode from '@app/features/streamer_mode/state/StreamerMode';
 import Nagbar from '@app/features/ui/state/Nagbar';
 import {hasUnavailableElectronNativeContext, isDesktop} from '@app/features/ui/utils/NativeUtils';
@@ -168,6 +171,7 @@ export const useNagbarConditions = (): NagbarConditions => {
 		if (isSelfHosted) return false;
 		if (!hasPurchaseReadyAccount) return false;
 		if (!premiumState || !priceAnnouncementCampaign) return false;
+		if (getStoreOwnedSubscription(premiumState)) return false;
 		const listPriceSwitch = premiumState.billing.list_price_switch ?? null;
 		if (!listPriceSwitch?.available || listPriceSwitch.pending) return false;
 		if (listPriceSwitch.currency !== priceAnnouncementCampaign.currency) return false;
@@ -252,7 +256,6 @@ export const useNagbarConditions = (): NagbarConditions => {
 			startupVoiceSessionRestoreSnapshotKey && startupVoiceSessionRestoreSnapshotKey === voiceSessionRestoreSnapshotKey,
 		);
 	})();
-	const canShowLinuxInputAccess = NativePermission.shouldShowLinuxInputAccessNagbar;
 	const canShowSoftwareEncoder = SoftwareEncoderWarning.showWarning;
 	const canShowStreamerMode = StreamerMode.shouldShowNagbar;
 	const canShowDesktopUpdateReady = Updater.shouldShowUpdateReadyNagbar;
@@ -302,6 +305,11 @@ export const useNagbarConditions = (): NagbarConditions => {
 			: nagbarState.forceEmailVerification
 				? true
 				: Boolean(RuntimeConfig.emailsEnabled && user?.isClaimed() && !user.verified),
+		canShowAccountLimited: nagbarState.forceHideAccountLimited
+			? false
+			: nagbarState.forceAccountLimited
+				? true
+				: user?.accountLimited === true,
 		canShowDesktopNotification: nagbarState.forceHideDesktopNotification
 			? false
 			: nagbarState.forceDesktopNotification
@@ -318,7 +326,6 @@ export const useNagbarConditions = (): NagbarConditions => {
 		canShowVisionaryMfa,
 		canShowVoiceSessionRestore,
 		needsTermsAcceptance,
-		canShowLinuxInputAccess,
 		canShowSoftwareEncoder,
 		canShowStreamerMode,
 		canShowDesktopUpdateReady,
@@ -368,6 +375,12 @@ export const useActiveNagbars = (conditions: NagbarConditions): Array<NagbarStat
 				type: NagbarType.EMAIL_VERIFICATION,
 				priority: -3,
 				visible: conditions.userNeedsVerification,
+				dismissible: false,
+			},
+			{
+				type: NagbarType.ACCOUNT_LIMITED,
+				priority: -3.75,
+				visible: conditions.canShowAccountLimited,
 				dismissible: false,
 			},
 			{
@@ -428,12 +441,6 @@ export const useActiveNagbars = (conditions: NagbarConditions): Array<NagbarStat
 				type: NagbarType.DESKTOP_NOTIFICATION,
 				priority: 8,
 				visible: conditions.canShowDesktopNotification,
-				dismissible: true,
-			},
-			{
-				type: NagbarType.LINUX_INPUT_ACCESS,
-				priority: 8.5,
-				visible: conditions.canShowLinuxInputAccess,
 				dismissible: true,
 			},
 			{

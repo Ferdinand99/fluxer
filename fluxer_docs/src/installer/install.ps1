@@ -11,11 +11,11 @@
 #   -Rollback  Put the images and the stack files of the last recorded upgrade back.
 #
 # Why one script and not a separate upgrader: an upgrade needs the host checks, the stack
-# download, the readiness poll and the health probe that the install already carries. A second
+# download, the readiness poll and the health probe that the install already has. A second
 # script either copies them or drifts from them, and the operator has two downloads and two
 # checksums to verify instead of one.
 #
-# This file is also the procedure. Every step of the upgrade carries the command an operator
+# This file is also the procedure. Every step of the upgrade includes the command an operator
 # types to do that step by hand, and the reason the step exists.
 #
 # Read this file before running it. The default mode writes .env, which holds every secret the
@@ -173,6 +173,7 @@ $FluxerBackupVolumes = @(
 $FluxerUpgradeSecretKeys = @(
 	@{Name = 'FLUXER_ERLANG_COOKIE'; Kind = 'hex'}
 	@{Name = 'FLUXER_MEDIA_PROXY_UPLOAD_RELAY_SECRET_BASE64'; Kind = 'base64'}
+	@{Name = 'FLUXER_PROFILE_PSEUDONYM_SECRET'; Kind = 'hex'}
 )
 
 $FluxerSecretKeys = @(
@@ -181,6 +182,7 @@ $FluxerSecretKeys = @(
 	@{Name = 'FLUXER_S3_SECRET_KEY'; Kind = 'hex'}
 	@{Name = 'FLUXER_SUDO_MODE_SECRET'; Kind = 'hex'}
 	@{Name = 'FLUXER_CONNECTION_INITIATION_SECRET'; Kind = 'hex'}
+	@{Name = 'FLUXER_PROFILE_PSEUDONYM_SECRET'; Kind = 'hex'}
 	@{Name = 'FLUXER_GATEWAY_RPC_AUTH_TOKEN'; Kind = 'hex'}
 	@{Name = 'FLUXER_ERLANG_COOKIE'; Kind = 'hex'}
 	@{Name = 'FLUXER_MEDIA_PROXY_SECRET_KEY'; Kind = 'hex'}
@@ -216,13 +218,13 @@ function Stop-Fluxer([string]$Message, [int]$Code) {
 }
 
 function Show-FluxerUsage {
-	Write-FluxerLine 'Usage: install.ps1 -Domain <host> -Email <address> [options]'
+	Write-FluxerLine 'Usage: install.ps1 -Domain <host> [options]'
 	Write-FluxerLine '       install.ps1 -Update [options]'
 	Write-FluxerLine '       install.ps1 -Rollback [options]'
 	Write-FluxerLine ''
 	Write-FluxerLine 'Options:'
 	Write-FluxerLine '  -Domain <host>          Hostname the instance answers on. Prompted when absent.'
-	Write-FluxerLine '  -Email <address>        Contact email for web push. Prompted when absent.'
+	Write-FluxerLine '  -Email <address>        Contact email for web push. Default: admin@<domain>.'
 	Write-FluxerLine '  -Engine <command>       Container engine to drive. Default: docker, or podman when'
 	Write-FluxerLine '                          docker is absent.'
 	Write-FluxerLine '  -Dir <path>             Working directory. Default: the fluxer folder in the home'
@@ -664,7 +666,7 @@ function Get-FluxerStackFiles([string]$StagingDir, [string]$RefValue) {
 # None of these files is part of an image, and all four are read from the working directory, so
 # docker compose pull never updates any of them. That is why an upgrade refreshes them itself.
 #
-# A refreshed docker-compose.yml can declare a variable the running .env does not carry. Compose
+# A refreshed docker-compose.yml can declare a variable the running .env does not define. Compose
 # writes ${NAME:?message} for a variable the stack requires and stops with that message until .env
 # sets it, and ${NAME:-default} for one that needs nothing from the operator. Every optional
 # override ships commented out in .env.example, so a new required key is the only kind that asks
@@ -680,11 +682,11 @@ function Move-FluxerStackFiles([string]$StagingDir, [string]$TargetDir) {
 #
 #   Copy-Item .env.example .env
 #
-# Close .env to every account but your own, then set FLUXER_DOMAIN and FLUXER_VAPID_EMAIL, the two
-# values only the operator knows. The five other non-secret keys in the list above ship correct in
-# .env.example and need no edit.
+# Close .env to every account but your own, then set FLUXER_DOMAIN, the one value only the operator
+# knows. FLUXER_VAPID_EMAIL is optional, and compose derives admin@FLUXER_DOMAIN while it is unset.
+# The five other non-secret keys in the list above ship correct in .env.example and need no edit.
 #
-# Every secret in .env.example carries the literal CHANGE_ME. A key whose name ends in _BASE64
+# Every secret in .env.example contains the literal CHANGE_ME. A key whose name ends in _BASE64
 # takes 32 random bytes as base64, every other key takes 32 random bytes as hex, and the VAPID pair
 # comes from the generator above.
 #
@@ -1233,7 +1235,7 @@ function Write-FluxerTextFile([string]$Path, [string[]]$Lines) {
 # keep, and what makes a rollback possible on a moving tag.
 #
 # The reference list comes from Compose and the ID under each reference comes from the container
-# running it, for the reason in Get-FluxerRunningImageIds. A reference no container carries is
+# running it, for the reason in Get-FluxerRunningImageIds. A reference no container uses is
 # recorded as `-`, which a rollback skips, because a version that was not running is not a version
 # to go back to.
 #
@@ -1748,7 +1750,7 @@ function Invoke-FluxerUpgrade([string]$TargetDir, [string]$EnvPath, [string]$Bac
 #
 # Two shapes, depending on what the upgrade moved:
 #
-#   A pinned tag moved, so the old images still carry their own tag. The tag goes back into .env
+#   A pinned tag moved, so the old images still have their own tag. The tag goes back into .env
 #   and Compose finds them.
 #
 #     By hand: set FLUXER_IMAGE_TAG back, then docker compose up -d
@@ -2093,9 +2095,11 @@ function Invoke-FluxerInstall {
 	}
 
 	$domainValue = Resolve-FluxerValue $Domain 'Hostname the instance answers on' '-Domain' $allowPrompt
-	$emailValue = Resolve-FluxerValue $Email 'Contact email for web push' '-Email' $allowPrompt
+	$emailValue = $Email
 	Assert-FluxerDomain $domainValue
-	Assert-FluxerEmail $emailValue
+	if ($emailValue.Length -gt 0) {
+		Assert-FluxerEmail $emailValue
+	}
 
 	if ($Ref.Length -eq 0) {
 		$script:Ref = Get-FluxerRefForTag $ImageTag
@@ -2112,7 +2116,11 @@ function Invoke-FluxerInstall {
 			Write-FluxerLine "  Edge bind:  $EdgeBind"
 		}
 		Write-FluxerLine "  Domain:     $domainValue"
-		Write-FluxerLine "  Email:      $emailValue"
+		if ($emailValue.Length -gt 0) {
+			Write-FluxerLine "  Email:      $emailValue"
+		} else {
+			Write-FluxerLine "  Email:      admin@$domainValue, derived by compose"
+		}
 		Write-FluxerLine "  Files:      $($FluxerStackFiles -join ', ')"
 		Write-FluxerLine "  Secrets:    $($FluxerSecretKeys.Count) generated into .env"
 		Write-FluxerLine 'Nothing was written.'
@@ -2145,6 +2153,9 @@ function Invoke-FluxerInstall {
 			} elseif ($entry.Kind -eq 'domain') {
 				$value = $domainValue
 			} elseif ($entry.Kind -eq 'email') {
+				if ($emailValue.Length -eq 0) {
+					continue
+				}
 				$value = $emailValue
 			} elseif ($entry.Kind -eq 'image_tag') {
 				$value = $ImageTag

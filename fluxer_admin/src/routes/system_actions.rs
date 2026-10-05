@@ -18,8 +18,8 @@ use crate::{
             InstanceMediaUpdateRequest, InstancePolicyUpdateRequest,
             InstanceRegistrationConfigUpdateRequest, InstanceServicesUpdateRequest,
             InstanceYoutubeIntegrationUpdateRequest, LimitConfigUpdateRequest, LimitRule,
-            LimitRuleFilters, PremiumMode, PushRelayConfigUpdateRequest, RegistrationMode,
-            SsoConfigUpdateRequest, VoiceE2eeScope,
+            LimitRuleFilters, PlutoniumPageConfigUpdateRequest, PremiumMode,
+            PushRelayConfigUpdateRequest, RegistrationMode, SsoConfigUpdateRequest, VoiceE2eeScope,
         },
     },
     config::AdminConfig,
@@ -217,6 +217,10 @@ pub async fn instance_config_post(
             instance_config_result(client.update_instance_config(&update).await)
         }
         "update_domain_migration" => match build_domain_migration_update(&form) {
+            Ok(update) => instance_config_result(client.update_instance_config(&update).await),
+            Err(message) => FlashData::error(message),
+        },
+        "update_plutonium_page" => match build_plutonium_page_update(&form) {
             Ok(update) => instance_config_result(client.update_instance_config(&update).await),
             Err(message) => FlashData::error(message),
         },
@@ -609,6 +613,41 @@ fn build_domain_migration_update(
     })
 }
 
+fn build_plutonium_page_update(
+    form: &MultiValueForm,
+) -> Result<InstanceConfigUpdateRequest, String> {
+    Ok(InstanceConfigUpdateRequest {
+        plutonium_page: Some(PlutoniumPageConfigUpdateRequest {
+            enabled: Some(form.bool_value("plutonium_page_enabled")),
+            rollout_basis_points: parse_form_number(
+                form,
+                "plutonium_page_rollout_basis_points",
+                "Rollout basis points",
+                0,
+                EXPERIMENT_ROLLOUT_BASIS_POINTS_MAX,
+            )?,
+            rollout_salt: parse_experiment_rollout_salt(form, "plutonium_page_rollout_salt")?,
+            included_user_ids: Some(parse_experiment_user_ids(
+                form.first("plutonium_page_included_user_ids")
+                    .unwrap_or_default(),
+                "Included user IDs",
+            )?),
+            included_guild_ids: Some(parse_experiment_user_ids(
+                form.first("plutonium_page_included_guild_ids")
+                    .unwrap_or_default(),
+                "Included guild IDs",
+            )?),
+            include_premium_users: Some(form.bool_value("plutonium_page_include_premium_users")),
+            excluded_user_ids: Some(parse_experiment_user_ids(
+                form.first("plutonium_page_excluded_user_ids")
+                    .unwrap_or_default(),
+                "Excluded user IDs",
+            )?),
+        }),
+        ..Default::default()
+    })
+}
+
 fn build_captcha_update(form: &MultiValueForm) -> Result<InstanceConfigUpdateRequest, String> {
     Ok(InstanceConfigUpdateRequest {
         captcha: Some(CaptchaConfigUpdateRequest {
@@ -799,7 +838,9 @@ fn build_integrations_update(form: &MultiValueForm) -> InstanceConfigUpdateReque
             youtube: Some(InstanceYoutubeIntegrationUpdateRequest {
                 api_key: clean("integration_youtube_api_key"),
             }),
-            email: Some(InstanceEmailIntegrationUpdateRequest {
+            email: (form.has_key_starting_with("integration_email_")
+                || form.has_key_starting_with("integration_smtp_"))
+            .then(|| InstanceEmailIntegrationUpdateRequest {
                 enabled: Some(form.bool_value("integration_email_enabled")),
                 provider: Some("smtp".to_owned()),
                 from_email: clean("integration_email_from_email"),
@@ -1157,6 +1198,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn build_integrations_update_leaves_email_alone_when_its_fields_are_hidden() {
+        let hidden = build_integrations_update(&MultiValueForm::parse(
+            b"integration_klipy_api_key=&integration_youtube_api_key=",
+        ));
+        let integrations = hidden.integrations.expect("integrations update");
+        assert!(integrations.email.is_none());
+        assert!(integrations.gif.is_some());
+
+        let shown = build_integrations_update(&MultiValueForm::parse(
+            b"integration_email_present=1&integration_smtp_host=smtp.example.com",
+        ));
+        let email = shown
+            .integrations
+            .and_then(|integrations| integrations.email)
+            .expect("email update");
+        assert_eq!(email.enabled, Some(false));
+
+        let from_an_older_page = build_integrations_update(&MultiValueForm::parse(
+            b"integration_klipy_api_key=&integration_smtp_host=smtp.example.com",
+        ));
+        let email = from_an_older_page
+            .integrations
+            .and_then(|integrations| integrations.email)
+            .expect("email update from a page without the presence marker");
+        assert_eq!(
+            email.smtp.and_then(|smtp| smtp.host).as_deref(),
+            Some("smtp.example.com")
+        );
+    }
+
+    #[test]
     fn build_sso_update_keeps_repeated_allowed_domains() {
         let form = MultiValueForm::parse(
             b"sso_enabled=true&sso_auto_provision=on&sso_allowed_domains%5B%5D=example.com&sso_allowed_domains%5B%5D=example.org&sso_display_name= Fluxer ",
@@ -1442,6 +1514,72 @@ mod tests {
             build_domain_migration_update(&form).expect_err("invalid guild id"),
             "Included guild IDs entry 2 must contain 1 to 20 decimal digits"
         );
+    }
+
+    #[test]
+    fn build_plutonium_page_update_reads_the_rollout_fields() {
+        let form = MultiValueForm::parse(
+            b"plutonium_page_enabled=true&plutonium_page_rollout_basis_points=%20500%20&plutonium_page_rollout_salt=%20plutonium-page-v2%20&plutonium_page_included_user_ids=1500000000000000001&plutonium_page_excluded_user_ids=1500000000000000002&plutonium_page_included_guild_ids=1500000000000000005%0A1500000000000000006%2C1500000000000000005&plutonium_page_include_premium_users=true",
+        );
+        let update = build_plutonium_page_update(&form)
+            .expect("valid form")
+            .plutonium_page
+            .expect("plutonium page update");
+        assert_eq!(update.enabled, Some(true));
+        assert_eq!(update.rollout_basis_points, Some(500));
+        assert_eq!(update.rollout_salt, Some("plutonium-page-v2".to_owned()));
+        assert_eq!(update.include_premium_users, Some(true));
+        assert_eq!(
+            update.included_guild_ids,
+            Some(vec![
+                "1500000000000000005".to_owned(),
+                "1500000000000000006".to_owned()
+            ])
+        );
+        assert_eq!(
+            update.included_user_ids,
+            Some(vec!["1500000000000000001".to_owned()])
+        );
+        assert_eq!(
+            update.excluded_user_ids,
+            Some(vec!["1500000000000000002".to_owned()])
+        );
+    }
+
+    #[test]
+    fn build_plutonium_page_update_leaves_the_feature_inert_when_nothing_is_submitted() {
+        let form = MultiValueForm::parse(b"_csrf=token");
+        let request = build_plutonium_page_update(&form).expect("valid form");
+        assert_eq!(
+            serde_json::to_value(request).expect("serializable update"),
+            serde_json::json!({"plutonium_page": {
+                "enabled": false,
+                "included_user_ids": [],
+                "included_guild_ids": [],
+                "include_premium_users": false,
+                "excluded_user_ids": [],
+            }})
+        );
+    }
+
+    #[test]
+    fn build_plutonium_page_update_rejects_invalid_rollout_fields() {
+        for (form, message) in [
+            (
+                "plutonium_page_rollout_basis_points=10001",
+                "Rollout basis points must be a whole number between 0 and 10000",
+            ),
+            (
+                "plutonium_page_included_guild_ids=1500000000000000005%0Anot-a-guild",
+                "Included guild IDs entry 2 must contain 1 to 20 decimal digits",
+            ),
+        ] {
+            let form = MultiValueForm::parse(form.as_bytes());
+            assert_eq!(
+                build_plutonium_page_update(&form).expect_err("invalid field"),
+                message
+            );
+        }
     }
 
     #[test]

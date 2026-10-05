@@ -9,6 +9,7 @@ export const Routes = {
 	REGISTER: '/register',
 	FORGOT_PASSWORD: '/forgot',
 	RESET_PASSWORD: '/reset',
+	RECOVER_ACCOUNT: '/recover',
 	VERIFY_EMAIL: '/verify',
 	AUTHORIZE_IP: '/authorize-ip',
 	EMAIL_REVERT: '/wasntme',
@@ -34,6 +35,8 @@ export const Routes = {
 	CONNECTION_CALLBACK: '/connection-callback',
 	USER_PROFILE: '/users/:userId',
 	THEME_STUDIO: '/theme-studio',
+	PLUTONIUM: '/channels/@premium',
+	LEGACY_PLUTONIUM: '/plutonium',
 	terms: () => marketingUrl('terms'),
 	privacy: () => marketingUrl('privacy'),
 	guidelines: () => marketingUrl('guidelines'),
@@ -69,10 +72,12 @@ export const Routes = {
 	isDMRoute: (pathname: string) => pathname.startsWith('/channels/@me'),
 	isFavoritesRoute: (pathname: string) => pathname.startsWith('/channels/@favorites'),
 	isDiscoverRoute: (pathname: string) => pathname.startsWith('/channels/@discover'),
-	isChannelRoute: (pathname: string) => pathname.startsWith('/channels/'),
+	isPlutoniumRoute: (pathname: string) => pathname === '/channels/@premium',
+	isChannelRoute: (pathname: string) => pathname.startsWith('/channels/') && !pathname.startsWith('/channels/@premium'),
 	isGuildChannelRoute: (pathname: string) =>
 		pathname.startsWith('/channels/') &&
 		!pathname.startsWith('/channels/@me') &&
 		!pathname.startsWith('/channels/@favorites') &&
-		!pathname.startsWith('/channels/@discover'),
+		!pathname.startsWith('/channels/@discover') &&
+		!pathname.startsWith('/channels/@premium'),
 } as const;

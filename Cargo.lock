@@ -1785,8 +1785,10 @@ name = "fluxer-gifs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "fluxer-svc",
  "fluxer_common",
+ "futures",
  "hmac 0.13.0",
  "moka",
  "reqwest",
@@ -1984,11 +1986,13 @@ dependencies = [
  "fluxer-svc",
  "fluxer_common",
  "futures",
+ "hmac 0.13.0",
  "moka",
  "rmp-serde",
  "scylla",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tokio",
  "tracing",
 ]
@@ -2040,6 +2044,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tokio",
  "tokio-util",
  "tower",

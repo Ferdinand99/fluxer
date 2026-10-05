@@ -13,6 +13,8 @@ pub struct InstanceConfigResponse {
     #[serde(default)]
     pub self_hosted: bool,
     #[serde(default)]
+    pub account_identity: AccountIdentityConfigResponse,
+    #[serde(default)]
     pub app_public: AppPublicConfigResponse,
     #[serde(default)]
     pub policy: InstancePolicyResponse,
@@ -25,11 +27,86 @@ pub struct InstanceConfigResponse {
     #[serde(default)]
     pub domain_migration: DomainMigrationConfigResponse,
     #[serde(default)]
+    pub plutonium_page: PlutoniumPageConfigResponse,
+    #[serde(default)]
     pub captcha: CaptchaConfigResponse,
     #[serde(default)]
     pub experiment_delivery: ExperimentDeliveryConfigResponse,
     #[serde(default)]
     pub billing: InstanceBillingResponse,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountIdentityMode {
+    #[default]
+    Email,
+    Username,
+}
+
+impl AccountIdentityMode {
+    pub fn is_username(self) -> bool {
+        matches!(self, Self::Username)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Email => "Email",
+            Self::Username => "Username",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TagStyle {
+    None,
+    #[default]
+    #[serde(other)]
+    Random,
+}
+
+impl TagStyle {
+    pub fn is_none(self) -> bool {
+        matches!(self, Self::None)
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::None => "No tags",
+            Self::Random => "Random tags",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+pub struct AccountIdentityConfigResponse {
+    #[serde(default)]
+    pub mode: AccountIdentityMode,
+    #[serde(default)]
+    pub locked: Option<bool>,
+    #[serde(default)]
+    pub tag_style: TagStyle,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct AccountIdentitySettings {
+    pub mode: AccountIdentityMode,
+    pub tag_style: TagStyle,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct InstanceAccountIdentityDiscovery {
+    #[serde(default)]
+    pub features: InstanceAccountIdentityDiscoveryFeatures,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct InstanceAccountIdentityDiscoveryFeatures {
+    #[serde(default)]
+    pub account_identity: AccountIdentityMode,
+    #[serde(default)]
+    pub tag_style: TagStyle,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -430,6 +507,7 @@ impl VoiceE2eeScope {
 
 pub const EXPERIMENT_MAX_TARGETED_USERS: usize = 1_000;
 pub const DOMAIN_MIGRATION_DEFAULT_SALT: &str = "domain-migration-v1";
+pub const PLUTONIUM_PAGE_DEFAULT_SALT: &str = "plutonium-page-v1";
 pub const CAPTCHA_COST_RANGE: std::ops::RangeInclusive<u32> = 1_000..=20_000;
 pub const CAPTCHA_MAX_COUNTER_RANGE: std::ops::RangeInclusive<u32> = 100..=20_000;
 
@@ -499,6 +577,52 @@ pub struct DomainMigrationConfigUpdateRequest {
     pub anonymous_rollout_basis_points: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub standalone_forwarding: Option<bool>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct PlutoniumPageConfigResponse {
+    pub enabled: bool,
+    pub config_version: u64,
+    pub rollout_basis_points: u32,
+    pub rollout_salt: String,
+    pub included_user_ids: Vec<String>,
+    pub included_guild_ids: Vec<String>,
+    pub include_premium_users: bool,
+    pub excluded_user_ids: Vec<String>,
+}
+
+impl Default for PlutoniumPageConfigResponse {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            config_version: 0,
+            rollout_basis_points: 0,
+            rollout_salt: PLUTONIUM_PAGE_DEFAULT_SALT.to_owned(),
+            included_user_ids: Vec::new(),
+            included_guild_ids: Vec::new(),
+            include_premium_users: false,
+            excluded_user_ids: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct PlutoniumPageConfigUpdateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollout_basis_points: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollout_salt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub included_user_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub included_guild_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_premium_users: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub excluded_user_ids: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -646,6 +770,8 @@ pub struct InstanceConfigUpdateRequest {
     pub push_relay: Option<PushRelayConfigUpdateRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domain_migration: Option<DomainMigrationConfigUpdateRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plutonium_page: Option<PlutoniumPageConfigUpdateRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub captcha: Option<CaptchaConfigUpdateRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -949,17 +1075,24 @@ mod tests {
                 .expect("admin schema");
         let domain_migration = serde_json::from_value::<DomainMigrationConfigResponse>(json!({}))
             .expect("default domain migration config");
+        let plutonium_page = serde_json::from_value::<PlutoniumPageConfigResponse>(json!({}))
+            .expect("default plutonium page config");
         let captcha = serde_json::from_value::<CaptchaConfigResponse>(json!({}))
             .expect("default captcha config");
         let delivery = serde_json::from_value::<ExperimentDeliveryConfigResponse>(json!({}))
             .expect("default delivery config");
         let domain_migration =
             serde_json::to_value(domain_migration).expect("serializable domain migration config");
+        let plutonium_page =
+            serde_json::to_value(plutonium_page).expect("serializable plutonium page config");
         let captcha = serde_json::to_value(captcha).expect("serializable captcha config");
         let delivery = serde_json::to_value(delivery).expect("serializable delivery config");
         let generated_domain_migration: generated_types::DomainMigrationConfigResponse =
             serde_json::from_value(domain_migration.clone())
                 .expect("generated domain migration config contract");
+        let generated_plutonium_page: generated_types::PlutoniumPageConfigResponse =
+            serde_json::from_value(plutonium_page.clone())
+                .expect("generated plutonium page config contract");
         let generated_captcha: generated_types::CaptchaConfigResponse =
             serde_json::from_value(captcha.clone()).expect("generated captcha config contract");
         let generated_delivery: generated_types::ExperimentDeliveryConfigResponse =
@@ -968,6 +1101,11 @@ mod tests {
             serde_json::to_value(generated_domain_migration)
                 .expect("serializable generated domain migration config"),
             domain_migration
+        );
+        assert_eq!(
+            serde_json::to_value(generated_plutonium_page)
+                .expect("serializable generated plutonium page config"),
+            plutonium_page
         );
         assert_eq!(
             serde_json::to_value(generated_captcha).expect("serializable generated captcha config"),
@@ -980,6 +1118,7 @@ mod tests {
         );
         for (name, value) in [
             ("DomainMigrationConfigResponse", domain_migration),
+            ("PlutoniumPageConfigResponse", plutonium_page),
             ("CaptchaConfigResponse", captcha),
             ("ExperimentDeliveryConfigResponse", delivery),
         ] {
@@ -1010,6 +1149,27 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_value(DomainMigrationConfigUpdateRequest::default())
+                .expect("serializable update"),
+            json!({})
+        );
+    }
+
+    #[test]
+    fn plutonium_page_update_preserves_empty_lists_and_omitted_fields() {
+        let update = PlutoniumPageConfigUpdateRequest {
+            included_user_ids: Some(Vec::new()),
+            excluded_user_ids: Some(Vec::new()),
+            ..Default::default()
+        };
+        let value = serde_json::to_value(update).expect("serializable update");
+        serde_json::from_value::<generated_types::PlutoniumPageConfigUpdateRequest>(value.clone())
+            .expect("generated update contract");
+        assert_eq!(
+            value,
+            json!({"included_user_ids": [], "excluded_user_ids": []})
+        );
+        assert_eq!(
+            serde_json::to_value(PlutoniumPageConfigUpdateRequest::default())
                 .expect("serializable update"),
             json!({})
         );

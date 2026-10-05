@@ -15,11 +15,13 @@ import type {ILogger} from '@app/api/ILogger';
 import {emitActivity} from '@app/api/infrastructure/activity/ActivityEvents';
 import type {IDiscriminatorService} from '@app/api/infrastructure/DiscriminatorService';
 import type {KVActivityTracker} from '@app/api/infrastructure/KVActivityTracker';
+import {usesUsernameSignIn} from '@app/api/instance/AccountIdentityModeCache';
 import {
 	type InstanceConfigRepository,
 	type InstanceSsoConfig,
 	REGISTRATION_PENDING_APPROVAL_TRAIT,
 } from '@app/api/instance/InstanceConfigRepository';
+import type {SingleCommunityService} from '@app/api/instance/SingleCommunityService';
 import {
 	deriveSsoRedirectUri,
 	getSsoRequestUrlPolicy,
@@ -28,13 +30,17 @@ import {
 } from '@app/api/instance/SsoConfigValidation';
 import {Logger} from '@app/api/Logger';
 import {profileSubstringBlocklistCache} from '@app/api/middleware/ProfileSubstringBlocklistCache';
+import type {RequestCache} from '@app/api/middleware/RequestCacheMiddleware';
 import type {User} from '@app/api/models/User';
 import {UserSettings} from '@app/api/models/UserSettings';
+import {deriveAvailableUsername, reserveUsername, type UsernameReservation} from '@app/api/user/UniqueUsernames';
+import {USERNAME_MODE_DISCRIMINATOR} from '@app/api/user/UserTag';
 import {EXTERNAL_RESPONSE_LIMITS} from '@app/api/utils/ExternalResponseLimits';
 import * as FetchUtils from '@app/api/utils/FetchUtils';
 import {isJsonRecord, parseJsonRecord, parseJsonWithGuard} from '@app/api/utils/JsonBoundaryUtils';
 import {generateRandomUsername} from '@app/api/utils/UsernameGenerator';
 import {deriveUsernameFromDisplayName} from '@app/api/utils/UsernameSuggestionUtils';
+import {AccountIdentityModes, TagStyles} from '@fluxer/constants/src/AccountIdentityConstants';
 import {SSO_MOBILE_CALLBACK_URI, SSO_MOBILE_STATE_PREFIX} from '@fluxer/constants/src/SsoConstants';
 import {ProfileFieldPrivacyFlags} from '@fluxer/constants/src/UserConstants';
 import {ValidationErrorCodes} from '@fluxer/constants/src/ValidationErrorCodes';
@@ -260,6 +266,7 @@ export class SsoService {
 		private readonly instanceConfigRepository: InstanceConfigRepository,
 		private readonly discriminatorService: IDiscriminatorService,
 		private readonly kvActivityTracker: KVActivityTracker,
+		private readonly singleCommunityService: SingleCommunityService,
 	) {}
 
 	async getPublicStatus(): Promise<PublicSsoStatus> {
@@ -326,7 +333,17 @@ export class SsoService {
 		return {authorization_url: authorizationUrlString, state, redirect_uri: config.redirectUri};
 	}
 
-	async completeLogin({code, state, request}: {code: string; state: string; request: Request}): Promise<{
+	async completeLogin({
+		code,
+		state,
+		request,
+		requestCache,
+	}: {
+		code: string;
+		state: string;
+		request: Request;
+		requestCache: RequestCache;
+	}): Promise<{
 		token: string;
 		user_id: string;
 		redirect_to: string;
@@ -344,7 +361,7 @@ export class SsoService {
 			config,
 		});
 		const claims = await this.resolveClaims(tokenResponse, config, statePayload.nonce);
-		const user = await this.resolveUserFromClaims(claims, config);
+		const user = await this.resolveUserFromClaims(claims, config, requestCache);
 		const [token] = await AuthSession.createAuthSession(this.apiContext, {
 			user,
 			origin: AuthSession.resolveSessionOrigin(this.apiContext, request),
@@ -352,12 +369,19 @@ export class SsoService {
 		return {token, user_id: user.id.toString(), redirect_to: statePayload.redirectTo ?? ''};
 	}
 
-	private async resolveUserFromClaims(claims: ResolvedSsoClaims, config: ResolvedSsoConfig): Promise<User> {
+	private async resolveUserFromClaims(
+		claims: ResolvedSsoClaims,
+		config: ResolvedSsoConfig,
+		requestCache: RequestCache,
+	): Promise<User> {
 		if (!claims.emailVerified) {
 			throw InputValidationError.fromCode('email_verified', ValidationErrorCodes.INVALID_SSO_TOKEN);
 		}
 		const emailLower = claims.email.toLowerCase();
-		getLogger().info({email: emailLower, has_sub: true}, 'SSO login with sub claim');
+		getLogger().info(
+			usesUsernameSignIn() ? {has_sub: true} : {email: emailLower, has_sub: true},
+			'SSO login with sub claim',
+		);
 		const identityUserId = await this.ssoIdentityRepository.findUserId(config.providerId, claims.sub);
 		if (identityUserId) {
 			const user = await this.apiContext.services.users.findUnique(identityUserId);
@@ -388,6 +412,7 @@ export class SsoService {
 		if (pendingApproval) {
 			throw new RegistrationPendingApprovalError();
 		}
+		await this.singleCommunityService.joinStockCommunity(user.id, requestCache);
 		return user;
 	}
 
@@ -432,6 +457,14 @@ export class SsoService {
 		return users.patchUpsert(user.id, {traits}, user.toRow());
 	}
 
+	private async allocateDiscriminator(username: string): Promise<number> {
+		const result = await this.discriminatorService.generateDiscriminator({username});
+		if (!result.available) {
+			throw InputValidationError.fromCode('username', ValidationErrorCodes.SSO_UNABLE_TO_ALLOCATE_DISCRIMINATOR);
+		}
+		return result.discriminator;
+	}
+
 	private async provisionUserFromClaims(
 		claims: ResolvedSsoClaims,
 		config: ResolvedSsoConfig,
@@ -439,14 +472,15 @@ export class SsoService {
 			pendingApproval?: boolean;
 		},
 	): Promise<User> {
-		const {users, snowflake} = this.apiContext.services;
+		const {users, snowflake, cache} = this.apiContext.services;
+		const accountIdentity = await this.instanceConfigRepository.getAccountIdentity();
+		const usernameMode = accountIdentity.mode === AccountIdentityModes.USERNAME;
+		const uniqueUsernames = accountIdentity.tagStyle === TagStyles.NONE;
 		const userId = (await snowflake.generate()) as UserID;
 		const baseName = claims.name?.trim() || claims.email.split('@')[0] || generateRandomUsername();
-		const username = deriveUsernameFromDisplayName(baseName) ?? generateRandomUsername();
-		const discriminatorResult = await this.discriminatorService.generateDiscriminator({username});
-		if (!discriminatorResult.available) {
-			throw InputValidationError.fromCode('username', ValidationErrorCodes.SSO_UNABLE_TO_ALLOCATE_DISCRIMINATOR);
-		}
+		const derivedUsername = deriveUsernameFromDisplayName(baseName) ?? generateRandomUsername();
+		const username = uniqueUsernames ? await deriveAvailableUsername(users, derivedUsername) : derivedUsername;
+		const discriminator = uniqueUsernames ? USERNAME_MODE_DISCRIMINATOR : await this.allocateDiscriminator(username);
 		const now = new Date();
 		const traits = new Set<string>([
 			'sso',
@@ -467,14 +501,13 @@ export class SsoService {
 		const userRow = {
 			user_id: userId,
 			username,
-			discriminator: discriminatorResult.discriminator,
+			discriminator,
 			global_name: globalName,
 			bot: false,
 			system: false,
-			email: claims.email.toLowerCase(),
+			email: usernameMode ? null : claims.email.toLowerCase(),
 			email_verified: claims.emailVerified,
 			email_bounced: false,
-			phone: null,
 			password_hash: null,
 			password_last_changed_at: null,
 			totp_secret: null,
@@ -502,7 +535,6 @@ export class SsoService {
 			stripe_subscription_id: null,
 			stripe_customer_id: null,
 			has_ever_purchased: false,
-			suspicious_activity_flags: 0,
 			terms_agreed_at: now,
 			privacy_agreed_at: now,
 			last_active_at: now,
@@ -528,12 +560,16 @@ export class SsoService {
 		await this.claimSsoIdentity(userId, claims.sub, config);
 		let createAttempted = false;
 		let userCreated = false;
+		let usernameReservation: UsernameReservation | null = null;
 		try {
+			if (uniqueUsernames) {
+				usernameReservation = await reserveUsername({users, cache}, username);
+			}
 			if (options?.pendingApproval) {
 				await this.instanceConfigRepository.addPendingRegistration({
 					user_id: userId.toString(),
 					username,
-					discriminator: discriminatorResult.discriminator,
+					discriminator,
 					global_name: globalName,
 					email: userRow.email,
 					requested_at: now.toISOString(),
@@ -567,7 +603,6 @@ export class SsoService {
 					locale: user.locale,
 					timezone: null,
 					invite_code: null,
-					suspicious_flags: user.suspiciousActivityFlags ?? 0,
 					flags: user.flags.toString(),
 				},
 				null,
@@ -591,6 +626,8 @@ export class SsoService {
 				}
 			}
 			throw error;
+		} finally {
+			await usernameReservation?.release();
 		}
 	}
 

@@ -5,7 +5,8 @@ use crate::api::generated::{snowflake, types as generated_types};
 use super::client::{AdminApiClient, ApiError, ApiResult};
 use super::types::{
     AdminUser, AdminUserMeResponse, GuildInfo, ListUserGuildsResponse, LookupUserResponse,
-    SearchUsersResponse, TerminateSessionsResponse, UserMutationResponse,
+    PasswordResetLinkResponse, SearchUsersResponse, TerminateSessionsResponse,
+    UserMutationResponse,
 };
 
 impl AdminApiClient {
@@ -231,22 +232,9 @@ impl AdminApiClient {
         Ok(resp.user)
     }
 
-    pub async fn update_suspicious_flags(&self, user_id: &str, flags: i32) -> ApiResult<AdminUser> {
-        let body = generated_types::AdminUserSuspiciousActivityFlagsRequest {
-            flags: generated_types::SuspiciousActivityFlags::from(flags),
-        };
-        let response = self
-            .generated()
-            .update_admin_user_suspicious_activity_flags(&snowflake(user_id), &body)
-            .await
-            .map_err(|e| self.generated_error(e))?;
-        let resp: UserMutationResponse = self.generated_value(response.into_inner())?;
-        Ok(resp.user)
-    }
-
     pub async fn set_user_acls(&self, user_id: &str, acls: &[String]) -> ApiResult<AdminUser> {
         let body = generated_types::AdminUserAclsRequest {
-            acls: super::admin_api_keys::parse_acls(acls)?,
+            acls: super::admin_api_keys::parse_acls(acls),
         };
         let response = self
             .generated()
@@ -296,21 +284,6 @@ impl AdminApiClient {
         Ok(resp.user)
     }
 
-    pub async fn update_has_verified_phone(
-        &self,
-        user_id: &str,
-        has_verified_phone: bool,
-    ) -> ApiResult<AdminUser> {
-        let body = generated_types::AdminUserPhoneVerificationRequest { has_verified_phone };
-        let response = self
-            .generated()
-            .update_admin_user_phone_verification(&snowflake(user_id), &body)
-            .await
-            .map_err(|e| self.generated_error(e))?;
-        let resp: UserMutationResponse = self.generated_value(response.into_inner())?;
-        Ok(resp.user)
-    }
-
     pub async fn clear_user_fields(
         &self,
         user_id: &str,
@@ -327,28 +300,6 @@ impl AdminApiClient {
         let response = self
             .generated()
             .clear_admin_user_profile_fields(&snowflake(user_id), &body)
-            .await
-            .map_err(|e| self.generated_error(e))?;
-        let resp: UserMutationResponse = self.generated_value(response.into_inner())?;
-        Ok(resp.user)
-    }
-
-    pub async fn set_bot_status(&self, user_id: &str, is_bot: bool) -> ApiResult<AdminUser> {
-        let body = generated_types::AdminUserBotStatusRequest { bot: is_bot };
-        let response = self
-            .generated()
-            .set_admin_user_bot_status(&snowflake(user_id), &body)
-            .await
-            .map_err(|e| self.generated_error(e))?;
-        let resp: UserMutationResponse = self.generated_value(response.into_inner())?;
-        Ok(resp.user)
-    }
-
-    pub async fn set_system_status(&self, user_id: &str, is_system: bool) -> ApiResult<AdminUser> {
-        let body = generated_types::AdminUserSystemStatusRequest { system: is_system };
-        let response = self
-            .generated()
-            .set_admin_user_system_status(&snowflake(user_id), &body)
             .await
             .map_err(|e| self.generated_error(e))?;
         let resp: UserMutationResponse = self.generated_value(response.into_inner())?;
@@ -518,6 +469,26 @@ impl AdminApiClient {
     pub async fn send_password_reset(&self, user_id: &str) -> ApiResult<()> {
         self.generated()
             .send_admin_user_password_reset(&snowflake(user_id))
+            .await
+            .map_err(|e| self.generated_error(e))?;
+        Ok(())
+    }
+
+    pub async fn create_password_reset_link(
+        &self,
+        user_id: &str,
+    ) -> ApiResult<PasswordResetLinkResponse> {
+        let response = self
+            .generated()
+            .create_admin_user_password_reset_link(&snowflake(user_id))
+            .await
+            .map_err(|e| self.generated_error(e))?;
+        self.generated_value(response.into_inner())
+    }
+
+    pub async fn revoke_recovery_kit(&self, user_id: &str) -> ApiResult<()> {
+        self.generated()
+            .revoke_admin_user_recovery_kit(&snowflake(user_id))
             .await
             .map_err(|e| self.generated_error(e))?;
         Ok(())

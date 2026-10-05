@@ -144,8 +144,6 @@ type RouteMethod = 'GET' | 'POST' | 'DELETE';
 
 const PURCHASE_ROUTES: ReadonlyArray<[RouteMethod, string]> = [
 	['POST', '/stripe/checkout/subscription'],
-	['POST', '/stripe/checkout/subscription/preapproval'],
-	['POST', '/stripe/checkout/subscription/preapproval/continue'],
 	['POST', '/stripe/checkout/gift'],
 	['GET', '/premium/price-ids'],
 ];
@@ -282,6 +280,22 @@ describe('self-hosted premium routes', () => {
 				.execute();
 			const gifts = await createBuilder<Array<unknown>>(harness, account.token).get('/users/@me/gifts').execute();
 			expect(gifts).toEqual([]);
+		});
+
+		test('credits admin generated gift codes to the issuing admin', async () => {
+			const admin = await setUserACLs(harness, await createTestAccount(harness), [
+				AdminACLs.AUTHENTICATE,
+				AdminACLs.GIFT_CODES_GENERATE,
+			]);
+			const {codes} = await createBuilder<{codes: Array<string>}>(harness, admin.token)
+				.post('/admin/gift-codes')
+				.body({count: 1, duration_type: 'months', duration_quantity: 1})
+				.execute();
+			const code = codes[0]?.split('/').pop();
+			const gift = await createBuilderWithoutAuth<{created_by: {id: string} | null}>(harness)
+				.get(`/gifts/${code}`)
+				.execute();
+			expect(gift.created_by?.id).toBe(admin.userId);
 		});
 
 		test('keeps purchase and hosted-only routes unavailable', async () => {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import {Routes} from '@app/app/Routes';
 import {PRODUCT_NAME} from '@app/features/app/config/I18nDisplayConstants';
 import {detectDomainMigrationInstallKind} from '@app/features/app/domain_migration/DomainMigrationBrowser';
 import RuntimeConfig from '@app/features/app/state/RuntimeConfig';
@@ -49,6 +50,7 @@ import {IS_DEV} from '@app/features/platform/types/Env';
 import {Button} from '@app/features/ui/button/Button';
 import {SteppedCarousel} from '@app/features/ui/stepped_carousel/SteppedCarousel';
 import {getElectronAPI, isDesktop} from '@app/features/ui/utils/NativeUtils';
+import {formatUserTag} from '@app/features/user/utils/UserTagUtils';
 import * as FormUtils from '@app/lib/forms';
 import {msg} from '@lingui/core/macro';
 import {Trans, useLingui} from '@lingui/react/macro';
@@ -114,7 +116,7 @@ interface AuthLoginLayoutProps {
 	title?: ReactNode;
 	registerLink: ReactElement<Record<string, unknown>>;
 	onLoginComplete?: (payload: LoginSuccessPayload) => Promise<void> | void;
-	initialEmail?: string;
+	initialIdentifier?: string;
 }
 
 export const AuthLoginLayout = observer(function AuthLoginLayout({
@@ -127,7 +129,7 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 	title,
 	registerLink,
 	onLoginComplete,
-	initialEmail,
+	initialIdentifier,
 }: AuthLoginLayoutProps) {
 	const {i18n} = useLingui();
 	const location = useLocation();
@@ -147,19 +149,25 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 		initialMode: desktopHandoff && hasHandoffAccounts ? 'selecting' : 'login',
 	});
 	const [ipAuthChallenge, setIpAuthChallenge] = useState<IpAuthorizationChallenge | null>(null);
-	const [showAccountSelector, setShowAccountSelector] = useState(!desktopHandoff && hasStoredAccounts && !initialEmail);
+	const [showAccountSelector, setShowAccountSelector] = useState(
+		!desktopHandoff && hasStoredAccounts && !initialIdentifier,
+	);
 	const [isSwitching, setIsSwitching] = useState(false);
 	const [switchError, setSwitchError] = useState<string | null>(null);
-	const [prefillEmail, setPrefillEmail] = useState<string | null>(() => initialEmail ?? null);
+	const [prefillIdentifier, setPrefillIdentifier] = useState<string | null>(() => initialIdentifier ?? null);
 	const ssoRedirectPath = desktopHandoff ? `${location.pathname}${location.search}` : redirectPath;
+	const usesUsernameSignIn = RuntimeConfig.usesUsernameSignIn;
 	const showExpiredLoginForm = useCallback(
 		(account: Account) => {
-			const identifier = account.userData?.email ?? account.userData?.username ?? account.userId;
+			const signInIdentifier = usesUsernameSignIn
+				? account.userData && formatUserTag(account.userData)
+				: account.userData?.email;
+			const identifier = signInIdentifier ?? account.userData?.username ?? account.userId;
 			setShowAccountSelector(false);
 			setSwitchError(i18n._(SESSION_EXPIRED_SIGN_IN_AGAIN_DESCRIPTOR, {identifier}));
-			setPrefillEmail(account.userData?.email ?? null);
+			setPrefillIdentifier(signInIdentifier ?? null);
 		},
-		[i18n],
+		[i18n, usesUsernameSignIn],
 	);
 	const handleLoginSuccess = useCallback(
 		async (payload: LoginSuccessPayload) => {
@@ -173,18 +181,25 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 		},
 		[desktopHandoff, handoff, onLoginComplete],
 	);
-	const {form, isLoading, fieldErrors, handlePasskeyLogin, handlePasskeyBrowserLogin, isPasskeyLoading} =
-		useLoginFormController({
-			redirectPath,
-			inviteCode,
-			onLoginSuccess: handleLoginSuccess,
-			onRequireMfa: (challenge) => {
-				AuthenticationCommands.setMfaTicket(challenge);
-			},
-			onRequireIpAuthorization: (challenge) => {
-				setIpAuthChallenge(challenge);
-			},
-		});
+	const {
+		form,
+		identifierField,
+		isLoading,
+		fieldErrors,
+		handlePasskeyLogin,
+		handlePasskeyBrowserLogin,
+		isPasskeyLoading,
+	} = useLoginFormController({
+		redirectPath,
+		inviteCode,
+		onLoginSuccess: handleLoginSuccess,
+		onRequireMfa: (challenge) => {
+			AuthenticationCommands.setMfaTicket(challenge);
+		},
+		onRequireIpAuthorization: (challenge) => {
+			setIpAuthChallenge(challenge);
+		},
+	});
 	const isPasskeyBridgeRedeeming = usePasskeyBridgeReturn({
 		redirectPath,
 		onLoginSuccess: handleLoginSuccess,
@@ -230,16 +245,16 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 		[handleLoginSuccess, redirectPath],
 	);
 	useEffect(() => {
-		setPrefillEmail(initialEmail ?? null);
-		if (initialEmail) {
+		setPrefillIdentifier(initialIdentifier ?? null);
+		if (initialIdentifier) {
 			setShowAccountSelector(false);
 		}
-	}, [initialEmail]);
+	}, [initialIdentifier]);
 	useEffect(() => {
-		if (prefillEmail !== null) {
-			form.setValue('email', prefillEmail);
+		if (prefillIdentifier !== null) {
+			form.setValue(identifierField, prefillIdentifier);
 		}
-	}, [form.setValue, prefillEmail]);
+	}, [form.setValue, identifierField, prefillIdentifier]);
 	const handleSelectExistingAccount = useCallback(
 		async (account: Account) => {
 			if (account.isValid === false) {
@@ -285,18 +300,18 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 	const canChooseSavedAccount = desktopHandoff ? hasHandoffAccounts : hasStoredAccounts;
 	const handleChooseSavedAccount = useCallback(() => {
 		setSwitchError(null);
-		setPrefillEmail(initialEmail ?? null);
-		form.setValue('email', initialEmail ?? '');
+		setPrefillIdentifier(initialIdentifier ?? null);
+		form.setValue(identifierField, initialIdentifier ?? '');
 		if (desktopHandoff) {
 			handoff.setMode('selecting');
 		} else {
 			setShowAccountSelector(true);
 		}
-	}, [desktopHandoff, form.setValue, handoff, initialEmail]);
+	}, [desktopHandoff, form.setValue, handoff, identifierField, initialIdentifier]);
 	const handleAddAnotherAccount = useCallback(() => {
 		setShowAccountSelector(false);
 		setSwitchError(null);
-		setPrefillEmail(null);
+		setPrefillIdentifier(null);
 	}, []);
 	const handleStartSso = useCallback(async () => {
 		if (!ssoConfig?.enabled) return;
@@ -339,7 +354,7 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 		showAccountSelector,
 	]);
 	const hasExtraTopContent = extraTopContent !== undefined && extraTopContent !== null;
-	const startedFromAccountSelector = hasStoredAccounts && !desktopHandoff && !initialEmail;
+	const startedFromAccountSelector = hasStoredAccounts && !desktopHandoff && !initialIdentifier;
 	const showSplitLogo =
 		authLoginStep === 'credentials' && !desktopHandoff && !hasExtraTopContent && !startedFromAccountSelector;
 	const cardVariant = useMemo(() => {
@@ -453,8 +468,17 @@ export const AuthLoginLayout = observer(function AuthLoginLayout({
 					submitLabel={i18n._(SIGN_IN_DESCRIPTOR)}
 					classes={{form: styles.form}}
 					linksWrapperClassName={styles.formLinks}
+					identifierField={identifierField}
 					links={
-						RuntimeConfig.emailsEnabled ? (
+						usesUsernameSignIn ? (
+							<AuthRouterLink
+								to={Routes.RECOVER_ACCOUNT}
+								className={styles.link}
+								data-flx="auth.flow.auth-login-layout.link.recover"
+							>
+								{i18n._(FORGOT_PASSWORD_DESCRIPTOR)}
+							</AuthRouterLink>
+						) : RuntimeConfig.emailsEnabled ? (
 							<AuthRouterLink to="/forgot" className={styles.link} data-flx="auth.flow.auth-login-layout.link">
 								{i18n._(FORGOT_PASSWORD_DESCRIPTOR)}
 							</AuthRouterLink>
