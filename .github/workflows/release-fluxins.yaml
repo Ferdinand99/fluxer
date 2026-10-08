@@ -285,11 +285,15 @@ jobs:
           cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
           --step restore_shared_assets
 
+      # This step runs the CI helper, which in turn starts `cargo run` for the native addons. Both would
+      # use target/debug/fluxer-ci.exe, and Windows cannot replace a running executable ("Access is
+      # denied"). Build the outer helper into its own target directory so the two never collide.
       - name: Build native modules and the Electron main process
         working-directory: fluxer_desktop
         shell: pwsh
         run: >-
-          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          cargo run --locked --quiet --target-dir "$env:RUNNER_TEMP/ci-helper-target"
+          --manifest-path ../tools/ci/Cargo.toml -- build-desktop
           --step build_electron_main
 
       - name: Typecheck desktop client
