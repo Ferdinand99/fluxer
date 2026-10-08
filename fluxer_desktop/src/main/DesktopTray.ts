@@ -2,8 +2,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {BUILD_CHANNEL} from '@electron/common/BuildChannel';
+import {BUILD_CHANNEL, type BuildChannel} from '@electron/common/BuildChannel';
 import {getDesktopWindowBehaviorSettings} from '@electron/common/DesktopConfig';
 import {DESKTOP_APP_NAME} from '@electron/common/DesktopIdentity';
 import {createChildLogger} from '@electron/common/Logger';
@@ -12,17 +11,24 @@ import type {
 	TrayActionPayload,
 	TrayRuntimeStatePayload,
 } from '@electron/common/Types';
-import {openInstancePrompt} from '@electron/main/InstanceSwitch';
 import {relaunchStableLaunchPath} from '@electron/main/LinuxLaunchPath';
 import {onLocaleChange, t} from '@electron/main/MainI18n';
 import {app, type BrowserWindow, clipboard, Menu, nativeImage, Tray} from 'electron';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logger = createChildLogger('DesktopTray');
-const isCanary = BUILD_CHANNEL === 'canary';
+const ICON_DIR_NAMES: Record<BuildChannel, string> = {
+	stable: 'icons-stable',
+	canary: 'icons-canary',
+	development: 'icons-development',
+};
+const TRAY_POSITION_GUIDS: Record<BuildChannel, string> = {
+	stable: 'a3f6b0d2-47c1-4e95-8b2d-6e1f0c9a5d74',
+	canary: '5d2c8e41-9a7b-4f13-b6e0-2c4a91f7d3a8',
+	development: '9e4b1c70-3d68-4a2f-8c15-7b0a6d3e92f1',
+};
 const APP_NAME = DESKTOP_APP_NAME;
-const ICON_DIR_NAME = isCanary ? 'icons-canary' : 'icons-stable';
-const TRAY_POSITION_GUID = isCanary ? '5d2c8e41-9a7b-4f13-b6e0-2c4a91f7d3a8' : 'a3f6b0d2-47c1-4e95-8b2d-6e1f0c9a5d74';
+const ICON_DIR_NAME = ICON_DIR_NAMES[BUILD_CHANNEL];
+const TRAY_POSITION_GUID = TRAY_POSITION_GUIDS[BUILD_CHANNEL];
 
 interface DesktopTrayController {
 	createWindow: () => BrowserWindow;
@@ -164,7 +170,6 @@ function getCandidateIconDirs(): Array<string> {
 		path.join(process.resourcesPath, ICON_DIR_NAME),
 		process.resourcesPath,
 		path.join(app.getAppPath(), 'build_resources', ICON_DIR_NAME),
-		path.resolve(__dirname, '../../build_resources', ICON_DIR_NAME),
 		path.resolve(process.cwd(), 'build_resources', ICON_DIR_NAME),
 		path.resolve(process.cwd(), 'fluxer_desktop', 'build_resources', ICON_DIR_NAME),
 		path.dirname(app.getPath('exe')),
@@ -382,10 +387,6 @@ function buildTrayMenu(): Menu {
 		});
 	}
 	menuTemplate.push({type: 'separator'});
-	menuTemplate.push({
-		label: t('desktop.instance.change'),
-		click: () => runTrayMenuAction(openInstancePrompt),
-	});
 	menuTemplate.push({
 		label: t('desktop.tray.checkForUpdates'),
 		click: () => runTrayMenuAction(() => dispatchTrayAction({action: 'check-for-updates'})),

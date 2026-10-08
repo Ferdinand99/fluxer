@@ -4,7 +4,7 @@ use crate::{
     api::types::{
         AccountIdentityConfigResponse, AccountIdentityMode, AppPublicConfigResponse,
         CAPTCHA_COST_RANGE, CAPTCHA_MAX_COUNTER_RANGE, CaptchaConfigResponse,
-        DOMAIN_MIGRATION_DEFAULT_SALT, DomainMigrationConfigResponse,
+        ChannelThreadsConfigResponse, DOMAIN_MIGRATION_DEFAULT_SALT, DomainMigrationConfigResponse,
         EXPERIMENT_MAX_TARGETED_USERS, ExperimentDeliveryConfigResponse,
         GatewayRolloutConfigResponse, InstanceConfigResponse, InstanceIntegrationsResponse,
         InstanceMediaResponse, InstancePolicyResponse, InstanceRegistrationResponse,
@@ -190,8 +190,13 @@ pub fn instance_config_page(
                     "Gateway rollout behavior and the limit rules applied to users and guilds.",
                     html! {
                         (gateway_rollout_section(base, csrf_token, &instance_config.gateway_rollout))
-                        (domain_migration_section(base, csrf_token, &instance_config.domain_migration))
-                        (plutonium_page_section(base, csrf_token, &instance_config.plutonium_page))
+                        @if !instance_config.self_hosted {
+                            (domain_migration_section(base, csrf_token, &instance_config.domain_migration))
+                        }
+                        (channel_threads_section(base, csrf_token, &instance_config.channel_threads))
+                        @if !instance_config.self_hosted {
+                            (plutonium_page_section(base, csrf_token, &instance_config.plutonium_page))
+                        }
                         (experiment_delivery_section(base, csrf_token, &instance_config.experiment_delivery))
                         @if let Some(limit_config) = limit_config {
                             (limit_config_section(base, limit_config))
@@ -1484,6 +1489,48 @@ fn captcha_section(base: &str, csrf_token: &str, captcha: &CaptchaConfigResponse
     )
 }
 
+fn channel_threads_available_to_everyone(channel_threads: &ChannelThreadsConfigResponse) -> bool {
+    channel_threads.enabled
+        && channel_threads.guild_basis_points >= 10_000
+        && channel_threads.user_basis_points >= 10_000
+        && channel_threads.disabled_guild_ids.is_empty()
+        && channel_threads.excluded_user_ids.is_empty()
+}
+
+fn channel_threads_section(
+    base: &str,
+    csrf_token: &str,
+    channel_threads: &ChannelThreadsConfigResponse,
+) -> Markup {
+    let everyone = channel_threads_available_to_everyone(channel_threads);
+    section_card_with_description(
+        "Threads and forums",
+        "Threads, forum channels and media channels in every community.",
+        html! {
+            form method="post" action={(base) "/instance-config?action=update_channel_threads"} {
+                (csrf_input(csrf_token))
+                div class="space-y-6" {
+                    (checkbox(
+                        "channel_threads_everyone",
+                        "true",
+                        "Available to everyone",
+                        everyone,
+                        true,
+                    ))
+                    @if channel_threads.enabled && !everyone {
+                        p class="text-xs text-neutral-500" {
+                            "Currently on for part of this instance. Saving applies the setting above to everyone."
+                        }
+                    }
+                    (form_actions(html! {
+                        (submit_button("Save"))
+                    }))
+                }
+            }
+        },
+    )
+}
+
 fn experiment_delivery_section(
     base: &str,
     csrf_token: &str,
@@ -2225,6 +2272,38 @@ mod tests {
         assert!(markup.contains("1 of 1000 stored"));
         assert!(markup.contains("2 of 1000 stored"));
         assert!(!markup.contains("at the cap"));
+    }
+
+    #[test]
+    fn channel_threads_section_is_a_single_everyone_toggle() {
+        let everyone = ChannelThreadsConfigResponse {
+            enabled: true,
+            guild_basis_points: 10_000,
+            user_basis_points: 10_000,
+            ..ChannelThreadsConfigResponse::default()
+        };
+        let on = channel_threads_section("/admin", "csrf", &everyone).into_string();
+        assert!(on.contains("action=update_channel_threads"));
+        assert!(on.contains("name=\"channel_threads_everyone\""));
+        assert!(on.contains("checked"));
+        assert!(!on.contains("basis_points"));
+        assert!(!on.contains("part of this instance"));
+
+        let partial = ChannelThreadsConfigResponse {
+            enabled: true,
+            enabled_guild_ids: vec!["1600000000000000001".to_owned()],
+            user_basis_points: 10_000,
+            ..ChannelThreadsConfigResponse::default()
+        };
+        let partial = channel_threads_section("/admin", "csrf", &partial).into_string();
+        assert!(!partial.contains("checked"));
+        assert!(partial.contains("part of this instance"));
+
+        let off =
+            channel_threads_section("/admin", "csrf", &ChannelThreadsConfigResponse::default())
+                .into_string();
+        assert!(!off.contains("checked"));
+        assert!(!off.contains("part of this instance"));
     }
 
     #[test]

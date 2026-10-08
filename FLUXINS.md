@@ -1,97 +1,78 @@
 # Fluxins
 
-Fluxins is a fork of [Fluxer](https://github.com/fluxerapp/fluxer) with a desktop client that
-can connect to a self-hosted instance. It is licensed under AGPL-3.0-or-later like upstream
-(see [LICENSE](./LICENSE)). Fluxer's branding is not covered by that license, see the README.
+Fluxins is a fork of [Fluxer](https://github.com/fluxerapp/fluxer) with its own desktop client for
+Windows and macOS. It is licensed under AGPL-3.0-or-later like upstream (see [LICENSE](./LICENSE)).
+Fluxer's branding is not covered by that license, see the README.
+
+## How the client works
+
+The desktop client follows upstream's architecture:
+
+- A **shell** (Electron) with native modules.
+- A **web renderer** that is bundled into the shell and also delivered as downloadable **modules**
+  (renderer, fonts, emoji sprites, noise suppression, ...). The shell checks
+  `<package origin>/desktop/stable/<platform>/<arch>/modules.json` and downloads newer modules.
+- **Instance accounts**: the login screen has an instance picker and the account menu lets you add
+  accounts on other instances.
 
 ## What differs from upstream
 
-- **Instance picker** in the desktop client: "Change instance..." in the tray menu, the help
-  menu and the File menu (`Ctrl+Shift+Alt+I`), plus a link on the desktop login screen
-  (`fluxer_app`, only visible on instances that serve a build containing it).
-- **Identity**: name, IDs, `fluxins://` protocol, user data directory and icons.
-- **Default instance**: `https://fluxer.opland.net`, set in `fluxer_desktop/src/common/Constants.ts`.
-- **Updates**: the Windows installer updates itself from this repo's GitHub releases (Velopack, see
-  below). macOS and the portable zip cannot self-update, but the app tells you when a newer release
-  exists and links to the download (see "Update notices").
+- **Identity**: name Fluxins, IDs (`net.opland.fluxins`), `fluxins://` protocol, user data directory,
+  Velopack id `fluxins_desktop` and icons. These live in `fluxer_desktop/src/common/DesktopIdentity.ts`,
+  `Constants.ts`, `UserDataPath.ts`, `electron-builder.config.cjs` and the tray GUIDs in `DesktopTray.ts`.
+- **Verified instances**: the instance picker lists Fluxer (official) and `fluxer.opland.net` with the
+  verified badge, and a fresh install shows the Opland instance as a fixed entry
+  (`fluxer_app/src/features/auth/flow/instance_selector/FluxinsVerifiedInstances.ts`).
+- **Package origin**: `https://ferdinand99.github.io/fluxer` (`CHANNEL_PACKAGE_ORIGINS` in
+  `fluxer_desktop/src/main/ShellDownloadFormats.ts`), served from the `gh-pages` branch.
+- **Shell updates**: Windows installs update through Velopack from this repository's GitHub releases
+  (`VELOPACK_UPDATE_SOURCE`, keep it the plain repository URL). macOS builds are unsigned and fall back
+  to the download page (`MAC_SELF_UPDATE_ENABLED` in `ShellUpdateCapability.ts`).
+- **Release pipeline**: `.github/workflows/release-fluxins.yaml`, unsigned and limited to Windows x64 and
+  macOS arm64.
+- **CI**: `.github/workflows/tests.yaml` only runs the jobs that matter for the client.
 
-## Releasing a new build
+## Releasing
 
-Releases are built by GitHub Actions (`.github/workflows/release-fluxins.yaml`):
+Actions -> "release fluxins" -> Run workflow. Versions are CalVer (`YYYY.MDD.MICRO`) from the UTC clock
+unless you pass `build_version`. The workflow:
 
-- Push a tag: `git tag fluxins-v1.0.1 && git push origin fluxins-v1.0.1`, or
-- Actions -> "release fluxins" -> Run workflow, and enter the version.
-
-The workflow builds the native modules and packages the client on GitHub-hosted runners, then
-publishes one release with:
+1. builds the renderer once and packs it into modules (`tools/ci` steps `build_shared_assets`,
+   `split_modules`, `pack_modules`),
+2. builds the shell for Windows x64 and macOS arm64 around that renderer and packages it
+   (electron-builder, plus Velopack on Windows),
+3. writes `modules.json` for each platform and publishes the manifests and module packages to the
+   `gh-pages` branch (the package origin),
+4. publishes a GitHub release with the installers and the Velopack feed.
 
 | Platform | File | Notes |
 | --- | --- | --- |
-| Windows x64 | `Fluxins-<version>-win-x64-Setup.exe` | Installer (Start menu, desktop shortcut, uninstall). Updates itself. Not code-signed, so SmartScreen will warn. |
-| Windows x64 | `Fluxins-<version>-win-x64.zip` | Portable: unzip anywhere and run `Fluxins.exe`. Does not update itself. |
-| macOS (Apple Silicon) | `Fluxins-<version>-mac-arm64.dmg` and `.zip` | Ad-hoc signed, not notarised. See below. |
+| Windows x64 | `Fluxins-<version>-win-x64-Setup.exe` | Installer, updates itself. Not code-signed, SmartScreen will warn. |
+| Windows x64 | `Fluxins-<version>-win-x64.zip` | Portable, does not update itself. |
+| macOS arm64 | `Fluxins-<version>-mac-arm64.dmg` and `.zip` | Ad-hoc signed, not notarised. |
 
-Each installer/archive has a `.sha256` checksum next to it. The release also contains the
-Velopack update feed (`releases.win.json`, `RELEASES` and the `*-full.nupkg` package); these are
-read by the installed app and are not meant to be downloaded by hand.
+The release also contains the Velopack feed (`releases.win.json`, `RELEASES`, `*-full.nupkg`).
 
-### Windows updates (Velopack)
+One-time setup for the package origin: Settings -> Pages -> Deploy from a branch -> `gh-pages` / root.
+The workflow rewrites `gh-pages` as a single commit on every release and keeps the module packages of
+earlier releases.
 
-The installed app checks this repository (`VELOPACK_UPDATE_URL` in
-`fluxer_desktop/src/main/UpdaterDownloads.ts`), downloads the newest `*-full.nupkg` and installs it on
-restart. Velopack recognises the github.com URL and reads the releases through the GitHub API; keep
-`VELOPACK_UPDATE_URL` as the plain repository URL (adding a path such as `/releases/latest/download`
-makes every check fail with a 404). Things to know:
+### Windows updates
 
-- GitHub's `latest` ignores **pre-releases**: a release only becomes an update once it is published
-  as a normal release. Do not tick "prerelease" for a version you want installed clients to pick up.
-- Every release must contain the Velopack files, which the workflow always attaches. Do not delete
-  assets from the latest release.
-- Only clients installed with `Setup.exe` update themselves, not the zip.
-- Updates are unsigned. Anyone who can publish a release on this repository can ship code to every
-  installed client, so protect the repository and its Actions.
-- Which platforms self-update is set by `IN_APP_UPDATE_PLATFORMS` in
-  `fluxer_desktop/src/common/Constants.ts` (currently Windows only).
+Velopack reads the newest non-pre-release GitHub release. Do not tick "prerelease" for a version you want
+installed clients to pick up, do not delete assets from the latest release, and keep
+`VELOPACK_UPDATE_SOURCE` as the plain repository URL (a path such as `/releases/latest/download` makes
+every check fail with a 404). Updates are unsigned: anyone who can publish a release here can ship code
+to every installed client, so protect the repository and its Actions.
 
-### macOS notes
+### macOS
 
-Without an Apple Developer ID certificate the app is only ad-hoc signed, so Gatekeeper blocks
-the first launch. Open it with right-click -> Open, or run
-`xattr -dr com.apple.quarantine /Applications/Fluxins.app`. Passkeys are unavailable in
-unsigned macOS builds, because they need a signed app with an associated-domains entitlement.
-
-To produce signed and notarised builds, add the repository secrets `CSC_LINK`,
-`CSC_KEY_PASSWORD`, `APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`. Signing is
-switched on automatically when `CSC_LINK`, `CSC_NAME` or `CSC_KEYCHAIN` is set
-(`macSigningEnabled` in `fluxer_desktop/electron-builder.config.cjs`). You also need your own
-provisioning profile (set `provisioningProfile` there) and entitlements for your Apple team.
-
-### Update notices (macOS and portable zip)
-
-Builds that cannot update themselves still check the newest release: the app reads
-`https://api.github.com/repos/Ferdinand99/fluxer/releases/latest` (`GITHUB_LATEST_RELEASE_API_URL`),
-compares the tag (`fluxins-v<version>`) with its own version and, if newer, shows the usual
-"update available" prompt with a link to the matching `.dmg` (macOS) or `Setup.exe` (Windows).
-Download and install it by hand. Like the Velopack feed this uses `latest`, so pre-releases are
-ignored. Anonymous GitHub API calls are limited to 60 per hour per IP, which is plenty for this.
-`MANUAL_UPDATE_FEED` in `Constants.ts` selects the source (`'github'` here, `'pkgs'` is upstream's feed).
-
-### Building locally
-
-Needs Node 24, pnpm (see `packageManager` in `package.json`), Rust (MSVC toolchain) and
-Visual Studio Build Tools with the C++ workload.
-
-```powershell
-pnpm install --frozen-lockfile --ignore-scripts --filter "fluxer_desktop..."
-cd fluxer_desktop
-$env:NODE_ENV = 'production'; $env:FLUXER_DESKTOP_PRODUCTION = 'true'
-pnpm build
-$env:ELECTRON_ARCH = 'x64'
-pnpm exec electron-builder --config electron-builder.config.cjs --win dir --x64
-# Output: fluxer_desktop/dist-electron/win-unpacked/Fluxins.exe
-```
-
-Close any running Fluxins first; it locks `resources/app.asar`.
+Without an Apple Developer ID certificate the app is only ad-hoc signed, so Gatekeeper blocks the first
+launch (right-click -> Open, or `xattr -dr com.apple.quarantine /Applications/Fluxins.app`) and passkeys
+are unavailable. To sign and notarise, add the secrets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_API_KEY`,
+`APPLE_API_KEY_ID` and `APPLE_API_ISSUER`; signing switches on when `CSC_LINK`, `CSC_NAME` or
+`CSC_KEYCHAIN` is set (`macSigningEnabled` in `electron-builder.config.cjs`). You also need your own
+provisioning profile and entitlements, and can then set `MAC_SELF_UPDATE_ENABLED` to true.
 
 ## Keeping up with upstream
 
@@ -99,19 +80,18 @@ Close any running Fluxins first; it locks `resources/app.asar`.
 ./scripts/fluxins/sync-upstream.ps1 -Verify
 ```
 
-This fetches `upstream`, creates `sync/upstream-<date>` from `main`, merges
-`upstream/main` and (with `-Verify`) runs the desktop typecheck and tests. It never pushes.
-If it reports conflicts, they are almost always in the files listed in the script's `$hotFiles`
-(identity, constants, updater, menus): keep the Fluxins identity and take upstream's other changes.
-Then push the branch, open a pull request, test the client and tag a release.
+This fetches `upstream`, creates `sync/upstream-<date>`, merges `upstream/main` and (with `-Verify`) runs
+the desktop typecheck and tests. It never pushes. Conflicts are almost always in the identity files
+(`DesktopIdentity.ts`, `Constants.ts`, `UserDataPath.ts`, `DesktopTray.ts`, `ShellDownloadFormats.ts`,
+`electron-builder.config.cjs`): keep upstream's structure and re-apply the Fluxins values.
 
-Expected test result on Windows: the 4 AppImage tests fail (Linux-only), everything else passes.
-
-Do the sync regularly, and keep the client in step with the version of the server it connects to.
+On Windows the working tree has CRLF line endings, so tests that read source files as text fail locally
+(Bootstrap entry point, window chrome, ...). CI on Linux is the reference. The Linux-only AppImage tests and
+the symlink test also fail on Windows.
 
 ## Known gaps
 
 - `fluxer.com` domain-migration constants and the Linux packaging still use Fluxer names.
-- The release workflow builds Windows x64 and macOS arm64 only (no ARM64 Windows, Intel Mac or Linux).
-- The macOS build has not been run yet; the first workflow run may need adjustments.
+- The release workflow builds Windows x64 and macOS arm64 only.
 - Icons are generated placeholders (`fluxer_desktop/build_resources/icons-*`).
+- The release workflow is new and has to be exercised on GitHub; expect to iterate on it.
