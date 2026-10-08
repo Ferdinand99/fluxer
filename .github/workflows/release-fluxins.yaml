@@ -465,24 +465,41 @@ jobs:
           done
           find payload_tree -maxdepth 6 | sort | head -60
 
+      # The module packages are larger than the 100 MB file limit of the gh-pages branch, so they ship as
+      # release assets and modules.json points at them. Only the small manifests stay on GitHub Pages.
+      - name: Move module packages to release assets
+        run: >-
+          node scripts/fluxins/relocate-module-packages.mjs payload_tree/desktop stable module-assets
+          "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+
+      # The release comes first so no manifest ever points at an asset that does not exist yet.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          ls -la release-files module-assets
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" release-files/* module-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "Fluxins $VERSION" \
+            --generate-notes \
+            "${flags[@]}"
+
       - name: Publish package origin to GitHub Pages
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           repo="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # modules.json is replaced on every release, so the branch is rewritten as a single commit.
           rm -rf pages
-          if git ls-remote --exit-code --heads "$repo" gh-pages >/dev/null 2>&1; then
-            git clone --depth 1 --branch gh-pages "$repo" pages
-            rm -rf pages/.git
-          else
-            mkdir pages
-          fi
-          # Keep the module packages of earlier releases (they are content addressed) and replace the
-          # manifests. The branch is rewritten as a single commit so the history does not grow.
           mkdir -p pages/desktop
           cp -a payload_tree/desktop/. pages/desktop/
           touch pages/.nojekyll
+          find pages -type f | sort
           cd pages
           git init -q -b gh-pages
           git config user.name "github-actions[bot]"
@@ -490,18 +507,3 @@ jobs:
           git add -A
           git commit -q -m "Publish desktop package origin $VERSION"
           git push --force "$repo" gh-pages
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PRERELEASE: ${{ inputs.prerelease }}
-        run: |
-          ls -la release-files
-          flags=()
-          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
-          gh release create "$TAG" release-files/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$SOURCE_SHA" \
-            --title "Fluxins $VERSION" \
-            --generate-notes \
-            "${flags[@]}"
