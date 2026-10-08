@@ -7,19 +7,20 @@ use crate::{
             AppBrandingConfigUpdateRequest, AppLegalConfigUpdateRequest,
             AppPublicConfigUpdateRequest, AppRegistrationConfigUpdateRequest,
             AppSetupConfigUpdateRequest, CAPTCHA_COST_RANGE, CAPTCHA_MAX_COUNTER_RANGE,
-            CaptchaConfigUpdateRequest, CreateRegistrationUrlRequest,
-            DomainMigrationConfigUpdateRequest, EXPERIMENT_MAX_TARGETED_USERS,
-            ExperimentDeliveryConfigUpdateRequest, GatewayRolloutConfigUpdateRequest,
-            GatewayRolloutMode, InstanceAttachmentDecayUpdateRequest,
-            InstanceBlueskyIntegrationUpdateRequest, InstanceBlueskyKeyIntegrationUpdateRequest,
-            InstanceConfigUpdateRequest, InstanceEmailIntegrationUpdateRequest,
-            InstanceEmailSmtpIntegrationUpdateRequest, InstanceEmailSmtpTestRequest,
-            InstanceGifIntegrationUpdateRequest, InstanceIntegrationsUpdateRequest,
-            InstanceMediaUpdateRequest, InstancePolicyUpdateRequest,
-            InstanceRegistrationConfigUpdateRequest, InstanceServicesUpdateRequest,
-            InstanceYoutubeIntegrationUpdateRequest, LimitConfigUpdateRequest, LimitRule,
-            LimitRuleFilters, PlutoniumPageConfigUpdateRequest, PremiumMode,
-            PushRelayConfigUpdateRequest, RegistrationMode, SsoConfigUpdateRequest, VoiceE2eeScope,
+            CaptchaConfigUpdateRequest, ChannelThreadsConfigUpdateRequest,
+            CreateRegistrationUrlRequest, DomainMigrationConfigUpdateRequest,
+            EXPERIMENT_MAX_TARGETED_USERS, ExperimentDeliveryConfigUpdateRequest,
+            GatewayRolloutConfigUpdateRequest, GatewayRolloutMode,
+            InstanceAttachmentDecayUpdateRequest, InstanceBlueskyIntegrationUpdateRequest,
+            InstanceBlueskyKeyIntegrationUpdateRequest, InstanceConfigUpdateRequest,
+            InstanceEmailIntegrationUpdateRequest, InstanceEmailSmtpIntegrationUpdateRequest,
+            InstanceEmailSmtpTestRequest, InstanceGifIntegrationUpdateRequest,
+            InstanceIntegrationsUpdateRequest, InstanceMediaUpdateRequest,
+            InstancePolicyUpdateRequest, InstanceRegistrationConfigUpdateRequest,
+            InstanceServicesUpdateRequest, InstanceYoutubeIntegrationUpdateRequest,
+            LimitConfigUpdateRequest, LimitRule, LimitRuleFilters,
+            PlutoniumPageConfigUpdateRequest, PremiumMode, PushRelayConfigUpdateRequest,
+            RegistrationMode, SsoConfigUpdateRequest, VoiceE2eeScope,
         },
     },
     config::AdminConfig,
@@ -228,6 +229,11 @@ pub async fn instance_config_post(
             Ok(update) => instance_config_result(client.update_instance_config(&update).await),
             Err(message) => FlashData::error(message),
         },
+        "update_channel_threads" => instance_config_result(
+            client
+                .update_instance_config(&build_channel_threads_update(&form))
+                .await,
+        ),
         "update_experiment_delivery" => match build_experiment_delivery_update(&form) {
             Ok(update) => instance_config_result(client.update_instance_config(&update).await),
             Err(message) => FlashData::error(message),
@@ -669,6 +675,28 @@ fn build_captcha_update(form: &MultiValueForm) -> Result<InstanceConfigUpdateReq
         }),
         ..Default::default()
     })
+}
+
+fn build_channel_threads_update(form: &MultiValueForm) -> InstanceConfigUpdateRequest {
+    let channel_threads = if form.bool_value("channel_threads_everyone") {
+        ChannelThreadsConfigUpdateRequest {
+            enabled: Some(true),
+            guild_basis_points: Some(EXPERIMENT_ROLLOUT_BASIS_POINTS_MAX),
+            user_basis_points: Some(EXPERIMENT_ROLLOUT_BASIS_POINTS_MAX),
+            disabled_guild_ids: Some(Vec::new()),
+            excluded_user_ids: Some(Vec::new()),
+            ..Default::default()
+        }
+    } else {
+        ChannelThreadsConfigUpdateRequest {
+            enabled: Some(false),
+            ..Default::default()
+        }
+    };
+    InstanceConfigUpdateRequest {
+        channel_threads: Some(channel_threads),
+        ..Default::default()
+    }
 }
 
 fn build_experiment_delivery_update(
@@ -1434,6 +1462,30 @@ mod tests {
                 message
             );
         }
+    }
+
+    #[test]
+    fn build_channel_threads_update_turns_threads_on_for_everyone() {
+        let form = MultiValueForm::parse(b"_csrf=token&channel_threads_everyone=true");
+        assert_eq!(
+            serde_json::to_value(build_channel_threads_update(&form)).expect("serializable update"),
+            serde_json::json!({"channel_threads": {
+                "enabled": true,
+                "guild_basis_points": 10000,
+                "user_basis_points": 10000,
+                "disabled_guild_ids": [],
+                "excluded_user_ids": [],
+            }})
+        );
+    }
+
+    #[test]
+    fn build_channel_threads_update_only_turns_threads_off_when_unchecked() {
+        let form = MultiValueForm::parse(b"_csrf=token");
+        assert_eq!(
+            serde_json::to_value(build_channel_threads_update(&form)).expect("serializable update"),
+            serde_json::json!({"channel_threads": {"enabled": false}})
+        );
     }
 
     #[test]

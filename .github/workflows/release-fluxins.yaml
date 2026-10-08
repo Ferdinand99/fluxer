@@ -1,112 +1,220 @@
 name: release fluxins
 
-# Builds the Fluxins desktop client for Windows (x64) and macOS (Apple Silicon) and
-# publishes them as a GitHub release. Run it by hand (Actions -> release fluxins ->
-# Run workflow) or push a tag such as fluxins-v1.0.0.
+# Builds the Fluxins desktop client and publishes it.
 #
-# macOS builds are ad-hoc signed and not notarised unless a signing certificate is
-# provided through the CSC_LINK / CSC_KEY_PASSWORD (and APPLE_*) repository secrets.
+# The client is a shell (Electron) plus a web renderer that is split into modules. This workflow
+#   1. builds the renderer once and packs it into modules (Linux job),
+#   2. builds the shell for Windows x64 and macOS arm64 around the shared renderer,
+#   3. publishes the module manifests and packages to GitHub Pages (the client's package origin),
+#   4. publishes the installers and the Velopack update feed as a GitHub release.
+#
+# Run it from Actions -> release fluxins -> Run workflow. Versions are CalVer (YYYY.MDD.MICRO) taken
+# from the UTC clock unless you give one. macOS builds are ad-hoc signed and not notarised unless the
+# CSC_LINK / CSC_KEY_PASSWORD (and APPLE_*) repository secrets are set.
 
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Release version, for example 1.0.0 (the tag becomes fluxins-v<version>).
-        required: true
+      build_version:
+        description: Optional explicit CalVer (YYYY.MDD.MICRO). Leave empty to use the current UTC time.
+        required: false
+        default: ''
         type: string
       prerelease:
-        description: Mark the release as a pre-release.
+        description: Mark the release as a pre-release. Installed clients only update to normal releases.
         required: false
         default: false
         type: boolean
-  push:
-    tags:
-      - 'fluxins-v*'
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-fluxins-${{ github.ref }}
+  group: release-fluxins
   cancel-in-progress: false
 
 env:
-  CARGO_INCREMENTAL: '0'
+  CHANNEL: stable
   BUILD_CHANNEL: stable
+  CARGO_INCREMENTAL: '0'
+  # Where the client looks for modules.json and the module packages (CHANNEL_PACKAGE_ORIGINS in
+  # fluxer_desktop/src/main/ShellDownloadFormats.ts). Served from the gh-pages branch.
+  PKGS_DOWNLOAD_BASE_URL: https://ferdinand99.github.io/fluxer
 
 jobs:
   meta:
-    name: Resolve version
+    name: Resolve build metadata
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     outputs:
       version: ${{ steps.meta.outputs.version }}
-      tag: ${{ steps.meta.outputs.tag }}
+      pub_date: ${{ steps.meta.outputs.pub_date }}
+      source_sha: ${{ steps.meta.outputs.source_sha }}
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - name: Resolve version
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Rust toolchain (CI helpers)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: '1.98.1'
+
+      - name: Set metadata
         id: meta
         env:
-          INPUT_VERSION: ${{ inputs.version }}
-          REF_NAME: ${{ github.ref_name }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "push" ]; then
-            version="${REF_NAME#fluxins-v}"
-          else
-            version="$INPUT_VERSION"
-          fi
-          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$'; then
-            echo "Invalid version: $version" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=fluxins-v$version" >> "$GITHUB_OUTPUT"
+          FLUXER_BUILD_VERSION: ${{ inputs.build_version }}
+        run: >-
+          cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
+          --step set_metadata
+          --channel stable
+
+      - name: Resolve release tag
+        id: tag
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: echo "tag=fluxins-v$VERSION" >> "$GITHUB_OUTPUT"
+
+  shared_assets:
+    name: Build shared renderer assets and modules
+    needs: meta
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RELEASE_CHANNEL: stable
+      PUBLIC_RELEASE_CHANNEL: stable
+      VERSION: ${{ needs.meta.outputs.version }}
+      BUILD_VERSION: ${{ needs.meta.outputs.version }}
+      PUBLIC_BUILD_VERSION: ${{ needs.meta.outputs.version }}
+      SOURCE_SHA: ${{ needs.meta.outputs.source_sha }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.meta.outputs.source_sha }}
+
+      - name: Set up Rust toolchain (CI helpers and renderer wasm)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: '1.98.1'
+          targets: wasm32-unknown-unknown
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 26
+
+      - name: Set up pnpm
+        run: >-
+          cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
+          --step setup_pnpm
+
+      - name: Install dependencies
+        working-directory: fluxer_desktop
+        run: >-
+          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          --step install_dependencies
+
+      - name: Update version
+        working-directory: fluxer_desktop
+        run: >-
+          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          --step update_version
+
+      - name: Set build channel
+        working-directory: fluxer_desktop
+        run: >-
+          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          --step set_build_channel
+
+      - name: Build shared renderer assets
+        working-directory: fluxer_desktop
+        run: >-
+          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          --step build_shared_assets
+
+      - name: Prepare shared renderer artifact
+        run: >-
+          cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
+          --step prepare_shared_assets
+
+      - name: Upload shared renderer artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-shared-${{ needs.meta.outputs.version }}
+          path: desktop-shared-assets
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Split renderer into desktop modules
+        run: >-
+          cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
+          --step split_modules
+
+      - name: Pack desktop modules
+        run: >-
+          cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
+          --step pack_modules
+
+      - name: Upload desktop module packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: desktop-modules-${{ needs.meta.outputs.version }}
+          path: |
+            desktop-modules/classification.json
+            desktop-modules/*/module.json
+            desktop-modules/*/package.br
+            desktop-modules/*/package.br.sha256
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
 
   build:
-    name: Build Fluxins (${{ matrix.name }})
-    needs: meta
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    name: Build shell (${{ matrix.name }})
+    needs:
+      - meta
+      - shared_assets
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Windows x64
             platform: windows
-            runner: windows-latest
+            os: windows-latest
             arch: x64
-            rust_target: x86_64-pc-windows-msvc
+            electron_arch: x64
           - name: macOS arm64
             platform: macos
-            runner: macos-latest
+            os: macos-latest
             arch: arm64
-            rust_target: aarch64-apple-darwin
+            electron_arch: arm64
     env:
-      ELECTRON_ARCH: ${{ matrix.arch }}
+      RELEASE_CHANNEL: stable
+      PUBLIC_RELEASE_CHANNEL: stable
       VERSION: ${{ needs.meta.outputs.version }}
+      BUILD_VERSION: ${{ needs.meta.outputs.version }}
+      PUBLIC_BUILD_VERSION: ${{ needs.meta.outputs.version }}
+      PUB_DATE: ${{ needs.meta.outputs.pub_date }}
+      SOURCE_SHA: ${{ needs.meta.outputs.source_sha }}
+      DESKTOP_PLATFORM: ${{ matrix.platform }}
+      DESKTOP_ARCH: ${{ matrix.arch }}
+      PLATFORM: ${{ matrix.platform }}
+      ARCH: ${{ matrix.arch }}
+      ELECTRON_ARCH: ${{ matrix.electron_arch }}
+      FLUXER_MODULES: '1'
     steps:
       - name: Enable long paths (Windows)
         if: matrix.platform == 'windows'
         shell: pwsh
         run: git config --system core.longpaths true
 
-      - name: Checkout code
+      - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: 24
-
-      - name: Set up pnpm
-        shell: bash
-        run: |
-          pnpm_version="$(node -p "require('./package.json').packageManager.split('@')[1]")"
-          npm install --global "pnpm@$pnpm_version"
-          pnpm --version
-
-      - name: Install Python setuptools (macOS)
-        if: matrix.platform == 'macos'
-        run: brew install python-setuptools
+          ref: ${{ needs.meta.outputs.source_sha }}
 
       - name: Set up MSVC env (Windows)
         if: matrix.platform == 'windows'
@@ -118,44 +226,84 @@ jobs:
         uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
         with:
           toolchain: '1.98.1'
-          targets: ${{ matrix.rust_target }}
+          targets: ${{ matrix.platform == 'windows' && 'x86_64-pc-windows-msvc' || 'aarch64-apple-darwin' }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 26
+
+      - name: Install Python setuptools (macOS)
+        if: matrix.platform == 'macos'
+        run: brew install python-setuptools
+
+      # Windows must use PowerShell for every step that compiles Rust: in Git Bash the coreutils `link`
+      # command shadows the MSVC linker and every build script fails to link.
+      - name: Set up pnpm (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: >-
+          cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
+          --step setup_pnpm
+
+      - name: Set up pnpm (macOS)
+        if: matrix.platform == 'macos'
+        run: >-
+          cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
+          --step setup_pnpm
 
       - name: Install dependencies
-        shell: bash
-        run: pnpm install --frozen-lockfile --ignore-scripts --filter "fluxer_desktop..."
-
-      # Windows must use PowerShell here: in Git Bash the coreutils `link` command shadows
-      # the MSVC linker (link.exe) and every Rust build script fails to link.
-      - name: Build native modules and Electron app code (Windows)
-        if: matrix.platform == 'windows'
         working-directory: fluxer_desktop
         shell: pwsh
-        env:
-          NODE_ENV: production
-          FLUXER_DESKTOP_PRODUCTION: 'true'
-        run: pnpm build
+        run: >-
+          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          --step install_dependencies
 
-      - name: Build native modules and Electron app code (macOS)
-        if: matrix.platform == 'macos'
+      - name: Update version
         working-directory: fluxer_desktop
-        shell: bash
-        env:
-          NODE_ENV: production
-          FLUXER_DESKTOP_PRODUCTION: 'true'
-        run: pnpm build
+        shell: pwsh
+        run: >-
+          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          --step update_version
+
+      - name: Set build channel
+        working-directory: fluxer_desktop
+        shell: pwsh
+        run: >-
+          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          --step set_build_channel
+
+      - name: Download shared renderer artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: desktop-shared-${{ needs.meta.outputs.version }}
+          path: desktop-shared-assets
+
+      - name: Restore shared renderer assets
+        shell: pwsh
+        run: >-
+          cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop
+          --step restore_shared_assets
+
+      - name: Build native modules and the Electron main process
+        working-directory: fluxer_desktop
+        shell: pwsh
+        run: >-
+          cargo run --locked --quiet --manifest-path ../tools/ci/Cargo.toml -- build-desktop
+          --step build_electron_main
 
       - name: Typecheck desktop client
         working-directory: fluxer_desktop
-        shell: bash
+        shell: pwsh
         run: pnpm exec tsc --noEmit
 
-      - name: Package Fluxins (Windows)
+      - name: Package shell (Windows)
         if: matrix.platform == 'windows'
         working-directory: fluxer_desktop
-        shell: bash
+        shell: pwsh
         run: >-
           pnpm exec electron-builder --config electron-builder.config.cjs
-          --win dir --x64 --config.extraMetadata.version="$VERSION"
+          --win dir --x64
 
       - name: Set up .NET SDK (Windows)
         if: matrix.platform == 'windows'
@@ -183,10 +331,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "vpk pack failed with exit code $LASTEXITCODE" }
           Get-ChildItem velopack-out
 
-      - name: Package Fluxins (macOS)
+      - name: Package shell (macOS)
         if: matrix.platform == 'macos'
         working-directory: fluxer_desktop
-        shell: bash
         env:
           # Only used when the secrets exist; otherwise the build is ad-hoc signed.
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -203,7 +350,7 @@ jobs:
           if [ -z "${CSC_LINK:-}" ]; then
             echo "No signing certificate configured: building an ad-hoc signed, unnotarised app."
           fi
-          pnpm exec electron-builder --config electron-builder.config.cjs             --mac --arm64 --config.extraMetadata.version="$VERSION"
+          pnpm exec electron-builder --config electron-builder.config.cjs --mac --arm64
 
       - name: Collect release files (Windows)
         if: matrix.platform == 'windows'
@@ -260,29 +407,89 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: fluxins-${{ matrix.platform }}-${{ matrix.arch }}
+          name: shell-${{ matrix.platform }}-${{ matrix.arch }}-${{ needs.meta.outputs.version }}
           path: release-files/*
           if-no-files-found: error
 
-  release:
-    name: Publish release
-    needs: [meta, build]
+  publish:
+    name: Publish release and package origin
+    needs:
+      - meta
+      - shared_assets
+      - build
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     permissions:
       contents: write
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      PUB_DATE: ${{ needs.meta.outputs.pub_date }}
+      SOURCE_SHA: ${{ needs.meta.outputs.source_sha }}
+      TAG: ${{ needs.meta.outputs.tag }}
     steps:
-      - name: Download build artifacts
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.meta.outputs.source_sha }}
+
+      - name: Set up Rust toolchain (CI helpers)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: '1.98.1'
+
+      - name: Download desktop module packages
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: fluxins-*
+          name: desktop-modules-${{ needs.meta.outputs.version }}
+          path: desktop-modules
+
+      - name: Download shell artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: shell-*-${{ needs.meta.outputs.version }}
           path: release-files
           merge-multiple: true
+
+      - name: Build module manifests (Windows x64 and macOS arm64)
+        run: |
+          mkdir -p payload_tree/desktop
+          export DESKTOP_MODULE_ONLY=1
+          for target in "win32 x64" "darwin arm64"; do
+            set -- $target
+            PLATFORM="$1" ARCH="$2" cargo run --locked --quiet --manifest-path tools/ci/Cargo.toml -- build-desktop \
+              --step build_module_manifest
+          done
+          find payload_tree -maxdepth 6 | sort | head -60
+
+      - name: Publish package origin to GitHub Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          rm -rf pages
+          if git ls-remote --exit-code --heads "$repo" gh-pages >/dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "$repo" pages
+            rm -rf pages/.git
+          else
+            mkdir pages
+          fi
+          # Keep the module packages of earlier releases (they are content addressed) and replace the
+          # manifests. The branch is rewritten as a single commit so the history does not grow.
+          mkdir -p pages/desktop
+          cp -a payload_tree/desktop/. pages/desktop/
+          touch pages/.nojekyll
+          cd pages
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publish desktop package origin $VERSION"
+          git push --force "$repo" gh-pages
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.meta.outputs.version }}
-          TAG: ${{ needs.meta.outputs.tag }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
           ls -la release-files
@@ -290,7 +497,7 @@ jobs:
           if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
           gh release create "$TAG" release-files/* \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "$SOURCE_SHA" \
             --title "Fluxins $VERSION" \
             --generate-notes \
             "${flags[@]}"

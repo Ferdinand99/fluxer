@@ -54,6 +54,7 @@ export interface APIConfig {
 	headersTimeoutMs: number;
 	requestTimeoutMs: number;
 	maxInflightRequests: number;
+	automatedMessageDeletionDelayDays: number;
 	ipBanExemptIps: Array<string>;
 	cassandra: {
 		hosts: string;
@@ -202,6 +203,7 @@ export interface APIConfig {
 			monthlyBrl?: string;
 			monthlyDkk?: string;
 			monthlyInr?: string;
+			monthlyIsk?: string;
 			monthlyNok?: string;
 			monthlyPln?: string;
 			monthlySek?: string;
@@ -211,6 +213,7 @@ export interface APIConfig {
 			yearlyBrl?: string;
 			yearlyDkk?: string;
 			yearlyInr?: string;
+			yearlyIsk?: string;
 			yearlyNok?: string;
 			yearlyPln?: string;
 			yearlySek?: string;
@@ -223,6 +226,8 @@ export interface APIConfig {
 			gift1YearDkk?: string;
 			gift1MonthNok?: string;
 			gift1YearNok?: string;
+			gift1MonthIsk?: string;
+			gift1YearIsk?: string;
 			gift1MonthBrl?: string;
 			gift1MonthInr?: string;
 			gift1MonthPln?: string;
@@ -349,6 +354,7 @@ export interface APIConfig {
 		laneName?: APIWorkerLaneName;
 		taskName?: WorkerTaskName;
 		enableCronScheduler?: boolean;
+		metricsPort?: number;
 		laneConcurrencyOverrides: {
 			realtime?: number;
 			unfurl?: number;

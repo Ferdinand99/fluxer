@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {createRequire} from 'node:module';
-import {IN_APP_UPDATE_PLATFORMS, MANUAL_UPDATE_FEED} from '@electron/common/Constants';
-import {isPortableMode} from '@electron/common/UserDataPath';
 import {
 	AppImageChecksumError,
 	AppImageStagingError,
 	type AppImageTarget,
 	applyStagedAppImageUpdate,
 	discardStagedAppImageUpdate,
-	isRunningFromAppImage,
 	resolveAppImageTarget,
 	type StagedAppImageUpdate,
 	stageAppImageUpdate,
 	sweepAbandonedAppImageUpdates,
 } from '@electron/main/AppImageUpdate';
 import {destroyDesktopTray} from '@electron/main/DesktopTray';
-import {isFlatpakRuntime} from '@electron/main/LinuxSandbox';
+import {moduleNetworkFetch} from '@electron/main/ModuleNetworkFetch';
+import {MANUAL_DESKTOP_FORMATS, type ManualDesktopFormat} from '@electron/main/ShellDownloadFormats';
+import {resolveShellUpdatePlan, ShellUpdateCapability} from '@electron/main/ShellUpdateCapability';
 import {relaunchAndExit} from '@electron/main/Troubleshooting';
 import {
 	clearVelopackApplyAttempt,
@@ -27,20 +26,15 @@ import {
 import {
 	buildManualVersionDownloadUrl,
 	DOWNLOAD_PAGE_URL,
-	GITHUB_LATEST_RELEASE_API_URL,
 	getManualDownloadOptions,
 	getManualDownloadUrl,
-	MANUAL_DESKTOP_FORMATS,
-	type ManualDesktopFormat,
 	type ManualLatestFile,
 	type ManualLatestInfo,
-	parseGithubLatestRelease,
 	UPDATE_BASE_URL,
 	type UpdaterDownloadOption,
-	VELOPACK_UPDATE_URL,
 } from '@electron/main/UpdaterDownloads';
 import {setQuitting} from '@electron/main/Window';
-import {app, autoUpdater, type BrowserWindow, ipcMain} from 'electron';
+import {app, autoUpdater, type BrowserWindow, ipcMain, net} from 'electron';
 import log from 'electron-log';
 import type {UpdateInfo, VelopackAsset} from 'velopack';
 
@@ -156,7 +150,7 @@ function getVelopackUpdateSize(update: VelopackUpdate): number | null {
 
 function createVelopackUpdateManager() {
 	const {UpdateManager} = requireModule('velopack') as typeof import('velopack');
-	return new UpdateManager(VELOPACK_UPDATE_URL);
+	return new UpdateManager(UPDATE_BASE_URL);
 }
 
 type VelopackUpdateManager = ReturnType<typeof createVelopackUpdateManager>;
@@ -225,12 +219,27 @@ async function checkVelopackForUpdates(
 			send(getMainWindow(), {type: 'checking', context});
 			const updateManager = createVelopackUpdateManager();
 			const failedApply = resolveFailedVelopackApply(updateManager);
-			if (failedApply) {
+			let update: Awaited<ReturnType<VelopackUpdateManager['checkForUpdatesAsync']>>;
+			try {
+				update = await updateManager.checkForUpdatesAsync();
+			} catch (error) {
+				if (!failedApply) throw error;
 				await sendVelopackApplyFailure(context, getMainWindow, failedApply);
 				return;
 			}
-			const pendingUpdate = updateManager.getUpdatePendingRestart();
-			const update = await updateManager.checkForUpdatesAsync();
+			if (failedApply) {
+				const updateVersion = update ? getVelopackUpdateVersion(update) : null;
+				if (!updateVersion || compareVersions(updateVersion, failedApply.version) <= 0) {
+					await sendVelopackApplyFailure(context, getMainWindow, failedApply);
+					return;
+				}
+				log.info('A release newer than the update that failed to apply is out, retrying the in-app update', {
+					failedVersion: failedApply.version,
+					updateVersion,
+				});
+				clearVelopackApplyAttempt();
+			}
+			const pendingUpdate = failedApply ? null : updateManager.getUpdatePendingRestart();
 			if (!update) {
 				if (pendingUpdate) {
 					pendingVelopackUpdate = pendingUpdate;
@@ -271,7 +280,6 @@ async function checkVelopackForUpdates(
 				downloadStarted: false,
 			});
 		} catch (error) {
-			log.warn('Velopack update check failed', error);
 			send(getMainWindow(), {type: 'error', context, phase: 'check', message: getErrorMessage(error)});
 		}
 	})().finally(() => {
@@ -540,31 +548,12 @@ function parseManualLatestFiles(value: unknown): Partial<Record<ManualDesktopFor
 	return files;
 }
 
-async function fetchGithubLatest(): Promise<ManualLatestInfo> {
-	const response = await fetch(GITHUB_LATEST_RELEASE_API_URL, {
-		cache: 'no-store',
-		headers: {
-			Accept: 'application/vnd.github+json',
-			'User-Agent': `Fluxins-Updater/${app.getVersion()}`,
-		},
-	});
-	if (!response.ok) {
-		throw new Error(`Latest release request failed: ${response.status}`);
-	}
-	return parseGithubLatestRelease(await response.json());
-}
-
 async function fetchManualLatest(options: {forceRefresh?: boolean} = {}): Promise<ManualLatestInfo> {
 	const now = Date.now();
 	if (!options.forceRefresh && manualLatestCache && now - manualLatestCache.at < MANUAL_CACHE_TTL_MS) {
 		return manualLatestCache.info;
 	}
-	if (MANUAL_UPDATE_FEED === 'github') {
-		const info = await fetchGithubLatest();
-		manualLatestCache = {at: now, info};
-		return info;
-	}
-	const response = await fetch(`${UPDATE_BASE_URL}/latest`, {
+	const response = await net.fetch(`${UPDATE_BASE_URL}/latest`, {
 		cache: 'no-store',
 		headers: {
 			Accept: 'application/json',
@@ -640,6 +629,7 @@ async function downloadAppImageUpdate(
 				target,
 				url,
 				expectedSha256,
+				fetchImpl: moduleNetworkFetch,
 				onProgress: ({transferred, total}) => {
 					const now = Date.now();
 					const dtMs = now - lastSampleAt;
@@ -828,37 +818,23 @@ function registerManualUpdater(
 }
 
 export function registerUpdater(getMainWindow: () => BrowserWindow | null) {
-	if (!app.isPackaged) {
-		registerManualUpdater(getMainWindow, 'unpackaged');
-		return;
-	}
-	if (isPortableMode()) {
-		registerManualUpdater(getMainWindow, 'platform');
-		return;
-	}
-	if (isFlatpakRuntime()) {
-		registerManualUpdater(getMainWindow, 'managed-package');
-		return;
-	}
-	if (!IN_APP_UPDATE_PLATFORMS.includes(process.platform)) {
-		// No self-update on this platform: tell the user about new releases and link to the download.
-		registerManualUpdater(getMainWindow, 'platform');
-		return;
-	}
-	if (process.platform === 'win32') {
-		registerVelopackUpdater(getMainWindow);
-		return;
-	}
-	if (process.platform === 'darwin') {
-		registerElectronUpdater(getMainWindow);
-		return;
-	}
-	if (process.platform === 'linux' && isRunningFromAppImage()) {
-		const appImage = resolveAppImageTarget();
-		if (appImage.ok) {
-			registerAppImageUpdater(getMainWindow, appImage.target);
+	const plan = resolveShellUpdatePlan();
+	switch (plan.capability) {
+		case ShellUpdateCapability.SELF_UPDATE:
+			if (plan.updater === 'velopack') {
+				registerVelopackUpdater(getMainWindow);
+				return;
+			}
+			if (plan.updater === 'appimage') {
+				registerAppImageUpdater(getMainWindow, plan.target);
+				return;
+			}
+			registerElectronUpdater(getMainWindow);
 			return;
-		}
+		case ShellUpdateCapability.MANAGED_PACKAGE:
+			registerManualUpdater(getMainWindow, 'managed-package');
+			return;
+		default:
+			registerManualUpdater(getMainWindow, plan.reason);
 	}
-	registerManualUpdater(getMainWindow, 'platform');
 }

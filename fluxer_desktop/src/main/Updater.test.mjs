@@ -30,6 +30,8 @@ function transform(name) {
 }
 
 const appImageUpdateSource = transform('AppImageUpdate.ts');
+const shellDownloadFormatsSource = transform('ShellDownloadFormats.ts');
+const shellUpdateCapabilitySource = transform('ShellUpdateCapability.ts');
 const updaterDownloadsSource = transform('UpdaterDownloads.ts');
 const updaterSource = transform('Updater.ts');
 const updaterPlatformUtilsSource = transform('../../../fluxer_app/src/features/app/utils/UpdaterPlatformUtils.ts');
@@ -137,13 +139,11 @@ function loadUpdater({
 			},
 		},
 		'@electron/common/BuildChannel': {BUILD_CHANNEL: 'canary'},
-		'@electron/common/Constants': {
-			IN_APP_UPDATE_PLATFORMS: ['win32', 'darwin', 'linux'],
-			MANUAL_UPDATE_FEED: 'pkgs',
-			PROJECT_REPOSITORY_URL: 'https://github.com/Ferdinand99/fluxer',
-		},
+		'@electron/common/Constants': {DOWNLOAD_PAGE_URLS: {canary: 'https://canary.fluxer.app/download'}},
+		'@electron/common/DesktopIdentity': {DESKTOP_ARTIFACT_PRODUCT_NAME: 'Fluxer-Canary'},
 		'@electron/common/UserDataPath': {isPortableMode: () => false},
 		'@electron/main/DesktopTray': {destroyDesktopTray() {}},
+		'@electron/main/ModuleNetworkFetch': {moduleNetworkFetch: (input, init) => sandbox.fetch(input, init)},
 		'@electron/main/LinuxSandbox': {isFlatpakRuntime: () => false},
 		'@electron/main/Troubleshooting': {
 			relaunchAndExit() {
@@ -165,6 +165,7 @@ function loadUpdater({
 				exit() {},
 			},
 			autoUpdater: {on() {}},
+			net: {fetch: (input, init) => sandbox.fetch(input, init)},
 			ipcMain: {
 				handle(channel, handler) {
 					handlers.set(channel, handler);
@@ -189,7 +190,10 @@ function loadUpdater({
 		clearTimeout,
 		setImmediate,
 		fetch: (input, init) => {
-			const url = String(input).replace(/https:\/\/pkgs\.fluxer\.com\/desktop\/canary\/[^/]+\/[^/]+/, baseUrl);
+			const url = String(input).replace(
+				/https:\/\/ferdinand99\.github\.io\/fluxer\/desktop\/canary\/[^/]+\/[^/]+/,
+				baseUrl,
+			);
 			return fetch(url, init);
 		},
 		require: (specifier) => {
@@ -220,6 +224,20 @@ function loadUpdater({
 	sandbox.__filename = appImageUpdateSource.path;
 	vm.runInContext(appImageUpdateSource.code, context, {filename: appImageUpdateSource.path});
 	stubs['@electron/main/AppImageUpdate'] = appImageModule.exports;
+
+	const shellUpdateCapabilityModule = {exports: {}};
+	sandbox.module = shellUpdateCapabilityModule;
+	sandbox.exports = shellUpdateCapabilityModule.exports;
+	sandbox.__filename = shellUpdateCapabilitySource.path;
+	vm.runInContext(shellUpdateCapabilitySource.code, context, {filename: shellUpdateCapabilitySource.path});
+	stubs['@electron/main/ShellUpdateCapability'] = shellUpdateCapabilityModule.exports;
+
+	const shellDownloadFormatsModule = {exports: {}};
+	sandbox.module = shellDownloadFormatsModule;
+	sandbox.exports = shellDownloadFormatsModule.exports;
+	sandbox.__filename = shellDownloadFormatsSource.path;
+	vm.runInContext(shellDownloadFormatsSource.code, context, {filename: shellDownloadFormatsSource.path});
+	stubs['@electron/main/ShellDownloadFormats'] = shellDownloadFormatsModule.exports;
 
 	const updaterDownloadsModule = {exports: {}};
 	sandbox.module = updaterDownloadsModule;
@@ -332,7 +350,7 @@ describe('Updater AppImage lifecycle', () => {
 			assert.equal(available.downloadOptions[0].format, 'appimage');
 			assert.equal(
 				available.downloadOptions[0].suggestedName,
-				`Fluxins-Canary-${PUBLISHED_VERSION}-linux-arm64.AppImage`,
+				`Fluxer-Canary-${PUBLISHED_VERSION}-linux-arm64.AppImage`,
 			);
 		} finally {
 			chmodSync(install.applications, 0o755);
@@ -532,6 +550,38 @@ describe('Updater Windows apply failures', () => {
 		assert.equal(updater.events[2].downloadStarted, false);
 		assert.equal(updater.events[2].downloadUrl, `${baseUrl}/setup`);
 		assert.equal(updater.applyState.attempt.version, PUBLISHED_VERSION);
+	});
+
+	test('keeps offering the installer when no newer release than the failed one is out', async () => {
+		const updater = loadWindowsUpdater({
+			installedVersion: CURRENT_VERSION,
+			remoteUpdate: {Version: PUBLISHED_VERSION, Size: 100},
+			applyAttempt: {version: PUBLISHED_VERSION, attemptedAt: 0},
+		});
+
+		await updater.check();
+
+		assert.deepEqual(types(updater.events), ['checking', 'error', 'available']);
+		assert.equal(updater.events[2].downloadStarted, false);
+		assert.equal(updater.applyState.cleared, 0);
+	});
+
+	test('retries the in-app update when a newer release than the failed one is out', async () => {
+		const newerVersion = '2026.905.101010';
+		const updater = loadWindowsUpdater({
+			installedVersion: CURRENT_VERSION,
+			pendingRestart: {Version: PUBLISHED_VERSION, Size: 100},
+			remoteUpdate: {Version: newerVersion, Size: 200},
+			applyAttempt: {version: PUBLISHED_VERSION, attemptedAt: 0},
+		});
+
+		await updater.check();
+
+		assert.equal(updater.applyState.cleared, 1);
+		assert.equal(updater.applyState.attempt, null);
+		assert.deepEqual(types(updater.events), ['checking', 'available']);
+		assert.equal(updater.events[1].version, newerVersion);
+		assert.equal(updater.events[1].downloadUrl, undefined);
 	});
 
 	test('resumes normal updates once the installed version catches up', async () => {

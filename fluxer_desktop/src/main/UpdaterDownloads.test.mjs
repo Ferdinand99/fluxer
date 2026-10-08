@@ -10,36 +10,62 @@ import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
 
-const sourcePath = fileURLToPath(new URL('./UpdaterDownloads.ts', import.meta.url));
-const source = readFileSync(sourcePath, 'utf8');
-const transformedSource = esbuild.transformSync(source, {
-	loader: 'ts',
-	format: 'cjs',
-	platform: 'node',
-	target: 'node20',
-}).code;
+function transform(name) {
+	const path = fileURLToPath(new URL(`./${name}`, import.meta.url));
+	return {
+		path,
+		code: esbuild.transformSync(readFileSync(path, 'utf8'), {
+			loader: 'ts',
+			format: 'cjs',
+			platform: 'node',
+			target: 'node20',
+		}).code,
+	};
+}
+
+const {path: sourcePath, code: transformedSource} = transform('UpdaterDownloads.ts');
+const shellDownloadFormatsSource = transform('ShellDownloadFormats.ts');
 
 const APPIMAGE_SHA256 = 'a'.repeat(64);
 const DEB_SHA256 = 'b'.repeat(64);
 const TAR_GZ_SHA256 = 'c'.repeat(64);
 
 function loadUpdaterDownloads({channel = 'stable', platform = 'linux', arch = 'x64'} = {}) {
+	const stubs = {};
 	function requireStub(specifier) {
+		if (specifier in stubs) return stubs[specifier];
 		if (specifier === '@electron/common/BuildChannel') return {BUILD_CHANNEL: channel};
-		if (specifier === '@electron/common/Constants')
-			return {PROJECT_REPOSITORY_URL: 'https://github.com/Ferdinand99/fluxer'};
+		if (specifier === '@electron/common/Constants') {
+			return {
+				DOWNLOAD_PAGE_URLS: {
+					stable: 'https://fluxer.app/download',
+					canary: 'https://canary.fluxer.app/download',
+					development: 'http://localhost:8088/download',
+				},
+			};
+		}
+		if (specifier === '@electron/common/DesktopIdentity') {
+			const names = {stable: 'Fluxer', canary: 'Fluxer-Canary', development: 'Fluxer-Development'};
+			return {DESKTOP_ARTIFACT_PRODUCT_NAME: names[channel]};
+		}
 		throw new Error(`Unexpected import: ${specifier}`);
 	}
 
-	const module = {exports: {}};
-	const context = vm.createContext({
-		require: requireStub,
-		module,
-		exports: module.exports,
-		process: {platform, arch},
-	});
-	vm.runInContext(transformedSource, context, {filename: sourcePath});
-	return module.exports;
+	function evaluate({path, code}) {
+		const module = {exports: {}};
+		const context = vm.createContext({
+			require: requireStub,
+			module,
+			exports: module.exports,
+			process: {platform, arch},
+		});
+		vm.runInContext(code, context, {filename: path});
+		return module.exports;
+	}
+
+	const shellDownloadFormats = evaluate(shellDownloadFormatsSource);
+	stubs['@electron/main/ShellDownloadFormats'] = shellDownloadFormats;
+	return evaluate({path: sourcePath, code: transformedSource});
 }
 
 function latestInfo(version, files = {}) {
@@ -65,29 +91,29 @@ describe('UpdaterDownloads Linux manual update options', () => {
 			{
 				format: 'appimage',
 				label: 'AppImage',
-				url: 'https://pkgs.fluxer.com/desktop/stable/linux/x64/2026.910.101500/appimage',
-				suggestedName: 'Fluxins-2026.910.101500-linux-x86_64.AppImage',
+				url: 'https://ferdinand99.github.io/fluxer/desktop/stable/linux/x64/2026.910.101500/appimage',
+				suggestedName: 'Fluxer-2026.910.101500-linux-x86_64.AppImage',
 				sha256: APPIMAGE_SHA256,
 			},
 			{
 				format: 'deb',
 				label: 'DEB package',
-				url: 'https://pkgs.fluxer.com/desktop/stable/linux/x64/2026.910.101500/deb',
-				suggestedName: 'Fluxins-2026.910.101500-linux-amd64.deb',
+				url: 'https://ferdinand99.github.io/fluxer/desktop/stable/linux/x64/2026.910.101500/deb',
+				suggestedName: 'Fluxer-2026.910.101500-linux-amd64.deb',
 				sha256: DEB_SHA256,
 			},
 			{
 				format: 'rpm',
 				label: 'RPM package',
-				url: 'https://pkgs.fluxer.com/desktop/stable/linux/x64/2026.910.101500/rpm',
-				suggestedName: 'Fluxins-2026.910.101500-linux-x86_64.rpm',
+				url: 'https://ferdinand99.github.io/fluxer/desktop/stable/linux/x64/2026.910.101500/rpm',
+				suggestedName: 'Fluxer-2026.910.101500-linux-x86_64.rpm',
 				sha256: null,
 			},
 			{
 				format: 'tar_gz',
 				label: 'tar.gz archive',
-				url: 'https://pkgs.fluxer.com/desktop/stable/linux/x64/2026.910.101500/tar_gz',
-				suggestedName: 'Fluxins-2026.910.101500-linux-x64.tar.gz',
+				url: 'https://ferdinand99.github.io/fluxer/desktop/stable/linux/x64/2026.910.101500/tar_gz',
+				suggestedName: 'Fluxer-2026.910.101500-linux-x64.tar.gz',
 				sha256: TAR_GZ_SHA256,
 			},
 		]);
@@ -101,20 +127,20 @@ describe('UpdaterDownloads Linux manual update options', () => {
 			options.map((option) => [option.url, option.suggestedName]),
 			[
 				[
-					'https://pkgs.fluxer.com/desktop/stable/linux/arm64/2026.910.101500/appimage',
-					'Fluxins-2026.910.101500-linux-arm64.AppImage',
+					'https://ferdinand99.github.io/fluxer/desktop/stable/linux/arm64/2026.910.101500/appimage',
+					'Fluxer-2026.910.101500-linux-arm64.AppImage',
 				],
 				[
-					'https://pkgs.fluxer.com/desktop/stable/linux/arm64/2026.910.101500/deb',
-					'Fluxins-2026.910.101500-linux-arm64.deb',
+					'https://ferdinand99.github.io/fluxer/desktop/stable/linux/arm64/2026.910.101500/deb',
+					'Fluxer-2026.910.101500-linux-arm64.deb',
 				],
 				[
-					'https://pkgs.fluxer.com/desktop/stable/linux/arm64/2026.910.101500/rpm',
-					'Fluxins-2026.910.101500-linux-aarch64.rpm',
+					'https://ferdinand99.github.io/fluxer/desktop/stable/linux/arm64/2026.910.101500/rpm',
+					'Fluxer-2026.910.101500-linux-aarch64.rpm',
 				],
 				[
-					'https://pkgs.fluxer.com/desktop/stable/linux/arm64/2026.910.101500/tar_gz',
-					'Fluxins-2026.910.101500-linux-arm64.tar.gz',
+					'https://ferdinand99.github.io/fluxer/desktop/stable/linux/arm64/2026.910.101500/tar_gz',
+					'Fluxer-2026.910.101500-linux-arm64.tar.gz',
 				],
 			],
 		);
@@ -129,10 +155,10 @@ describe('UpdaterDownloads Linux manual update options', () => {
 			(option) => option.format === 'deb',
 		);
 
-		assert.equal(stableDeb.url, 'https://pkgs.fluxer.com/desktop/stable/linux/x64/2026.910.101500/deb');
-		assert.equal(stableDeb.suggestedName, 'Fluxins-2026.910.101500-linux-amd64.deb');
-		assert.equal(canaryDeb.url, 'https://pkgs.fluxer.com/desktop/canary/linux/x64/2026.910.101500/deb');
-		assert.equal(canaryDeb.suggestedName, 'Fluxins-Canary-2026.910.101500-linux-amd64.deb');
+		assert.equal(stableDeb.url, 'https://ferdinand99.github.io/fluxer/desktop/stable/linux/x64/2026.910.101500/deb');
+		assert.equal(stableDeb.suggestedName, 'Fluxer-2026.910.101500-linux-amd64.deb');
+		assert.equal(canaryDeb.url, 'https://ferdinand99.github.io/fluxer/desktop/canary/linux/x64/2026.910.101500/deb');
+		assert.equal(canaryDeb.suggestedName, 'Fluxer-Canary-2026.910.101500-linux-amd64.deb');
 	});
 
 	test('only ever fetches 2026.908.173325 for a prompt built from that release', () => {
@@ -146,19 +172,19 @@ describe('UpdaterDownloads Linux manual update options', () => {
 		const options = structuredClone(getManualDownloadOptions(info));
 		const deb = options.find((option) => option.format === 'deb');
 
-		assert.equal(deb.suggestedName, 'Fluxins-Canary-2026.908.173325-linux-amd64.deb');
-		assert.equal(deb.url, 'https://pkgs.fluxer.com/desktop/canary/linux/x64/2026.908.173325/deb');
+		assert.equal(deb.suggestedName, 'Fluxer-Canary-2026.908.173325-linux-amd64.deb');
+		assert.equal(deb.url, 'https://ferdinand99.github.io/fluxer/desktop/canary/linux/x64/2026.908.173325/deb');
 		assert.equal(deb.sha256, DEB_SHA256);
 		assert.equal(options.length, 4);
 		for (const option of options) {
 			const [format, version] = new URL(option.url).pathname.split('/').reverse();
 			assert.equal(format, option.format);
 			assert.equal(version, '2026.908.173325');
-			assert.match(option.suggestedName, /^Fluxins-Canary-2026\.908\.173325-linux-/);
+			assert.match(option.suggestedName, /^Fluxer-Canary-2026\.908\.173325-linux-/);
 		}
 		assert.equal(
 			getManualDownloadUrl(info),
-			'https://pkgs.fluxer.com/desktop/canary/linux/x64/2026.908.173325/appimage',
+			'https://ferdinand99.github.io/fluxer/desktop/canary/linux/x64/2026.908.173325/appimage',
 		);
 	});
 });
@@ -175,7 +201,7 @@ describe('UpdaterDownloads manual download url', () => {
 
 		assert.equal(
 			getManualDownloadUrl(info),
-			'https://pkgs.fluxer.com/desktop/stable/linux/x64/2026.910.101500/appimage',
+			'https://ferdinand99.github.io/fluxer/desktop/stable/linux/x64/2026.910.101500/appimage',
 		);
 	});
 
@@ -201,82 +227,7 @@ describe('UpdaterDownloads manual download url', () => {
 		const stable = loadUpdaterDownloads({channel: 'stable', platform: 'darwin'});
 		const canary = loadUpdaterDownloads({channel: 'canary', platform: 'win32'});
 
-		assert.equal(
-			stable.getManualDownloadUrl(latestInfo('2026.910.101500')),
-			'https://github.com/Ferdinand99/fluxer/releases',
-		);
-		assert.equal(
-			canary.getManualDownloadUrl(latestInfo('2026.910.101500')),
-			'https://github.com/Ferdinand99/fluxer/releases',
-		);
-	});
-});
-
-describe('UpdaterDownloads GitHub latest release', () => {
-	const REPO = 'https://github.com/Ferdinand99/fluxer';
-	const asset = (name) => ({name, browser_download_url: `${REPO}/releases/download/fluxins-v0.2.0/${name}`});
-	const release = {
-		tag_name: 'fluxins-v0.2.0',
-		published_at: '2026-10-02T10:00:00Z',
-		assets: [
-			asset('Fluxins-0.2.0-win-x64-Setup.exe'),
-			asset('Fluxins-0.2.0-win-x64.zip'),
-			asset('Fluxins-0.2.0-mac-arm64.dmg'),
-			asset('Fluxins-0.2.0-mac-arm64.zip'),
-			asset('Fluxins-0.2.0-mac-arm64.dmg.sha256'),
-			asset('releases.win.json'),
-		],
-	};
-
-	test('uses the tag without its prefix as the version and keeps the publish date', () => {
-		const info = loadUpdaterDownloads({platform: 'darwin', arch: 'arm64'}).parseGithubLatestRelease(release);
-
-		assert.equal(info.version, '0.2.0');
-		assert.equal(info.pubDate, '2026-10-02T10:00:00Z');
-	});
-
-	test('picks the macOS dmg and zip for the running architecture', () => {
-		const downloads = loadUpdaterDownloads({platform: 'darwin', arch: 'arm64'});
-		const info = downloads.parseGithubLatestRelease(release);
-
-		assert.equal(info.files.dmg.url, `${REPO}/releases/download/fluxins-v0.2.0/Fluxins-0.2.0-mac-arm64.dmg`);
-		assert.equal(info.files.zip.url, `${REPO}/releases/download/fluxins-v0.2.0/Fluxins-0.2.0-mac-arm64.zip`);
-		assert.equal(info.files.setup, undefined);
-		assert.equal(downloads.getManualDownloadUrl(info), info.files.dmg.url);
-	});
-
-	test('picks the Windows installer, not the portable zip', () => {
-		const downloads = loadUpdaterDownloads({platform: 'win32', arch: 'x64'});
-		const info = downloads.parseGithubLatestRelease(release);
-
-		assert.equal(info.files.setup.url, `${REPO}/releases/download/fluxins-v0.2.0/Fluxins-0.2.0-win-x64-Setup.exe`);
-		assert.equal(info.files.zip, undefined);
-		assert.equal(downloads.getManualDownloadUrl(info), info.files.setup.url);
-	});
-
-	test('does not offer another architecture and falls back to the releases page', () => {
-		const downloads = loadUpdaterDownloads({platform: 'darwin', arch: 'x64'});
-		const info = downloads.parseGithubLatestRelease(release);
-
-		assert.equal(Object.keys(info.files).length, 0);
-		assert.equal(downloads.getManualDownloadUrl(info), `${REPO}/releases`);
-	});
-
-	test('accepts a plain v-prefixed tag and a response without assets', () => {
-		const info = loadUpdaterDownloads({platform: 'darwin', arch: 'arm64'}).parseGithubLatestRelease({
-			tag_name: 'v1.2.3',
-		});
-
-		assert.equal(info.version, '1.2.3');
-		assert.equal(info.pubDate, null);
-		assert.equal(Object.keys(info.files).length, 0);
-	});
-
-	test('rejects responses without a usable tag', () => {
-		const {parseGithubLatestRelease} = loadUpdaterDownloads({platform: 'darwin', arch: 'arm64'});
-
-		assert.throws(() => parseGithubLatestRelease(null), /not an object/);
-		assert.throws(() => parseGithubLatestRelease({}), /missing tag name/);
-		assert.throws(() => parseGithubLatestRelease({tag_name: 'fluxins-v'}), /no version/);
+		assert.equal(stable.getManualDownloadUrl(latestInfo('2026.910.101500')), 'https://fluxer.app/download');
+		assert.equal(canary.getManualDownloadUrl(latestInfo('2026.910.101500')), 'https://canary.fluxer.app/download');
 	});
 });

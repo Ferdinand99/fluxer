@@ -39,21 +39,16 @@ $hotFiles = @(
   'fluxer_desktop/electron-builder.config.cjs',
   'fluxer_desktop/package.json',
   'fluxer_desktop/src/common/Constants.ts',
-  'fluxer_desktop/src/common/DesktopConfig.ts',
   'fluxer_desktop/src/common/DesktopIdentity.ts',
-  'fluxer_desktop/src/common/Types.ts',
   'fluxer_desktop/src/common/UserDataPath.ts',
   'fluxer_desktop/src/main/DesktopTray.ts',
-  'fluxer_desktop/src/main/InstanceSwitch.ts',
-  'fluxer_desktop/src/main/IpcHandlers.ts',
-  'fluxer_desktop/src/main/MainI18n.ts',
-  'fluxer_desktop/src/main/Menu.ts',
-  'fluxer_desktop/src/main/Troubleshooting.ts',
-  'fluxer_desktop/src/main/Updater.ts',
-  'fluxer_desktop/src/main/UpdaterDownloads.ts',
-  'fluxer_desktop/src/preload/index.ts',
-  'fluxer_app/src/features/auth/flow/AuthLoginLayout.tsx',
-  'fluxer_app/src/features/auth/flow/ChangeInstanceModal.tsx'
+  'fluxer_desktop/src/main/ShellDownloadFormats.ts',
+  'fluxer_desktop/src/main/ShellSelfUpdate.ts',
+  'fluxer_desktop/src/main/ShellUpdateCapability.ts',
+  'fluxer_desktop/src/main/Bootstrap.ts',
+  'fluxer_app/src/features/auth/flow/InstanceSelector.tsx',
+  'fluxer_app/src/features/auth/flow/instance_selector/InstancePickerRows.tsx',
+  '.github/workflows/tests.yaml'
 )
 
 function Fail([string]$message) {
