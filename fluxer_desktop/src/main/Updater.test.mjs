@@ -190,7 +190,10 @@ function loadUpdater({
 		clearTimeout,
 		setImmediate,
 		fetch: (input, init) => {
-			const url = String(input).replace(/https:\/\/pkgs\.fluxer\.com\/desktop\/canary\/[^/]+\/[^/]+/, baseUrl);
+			const url = String(input).replace(
+				/https:\/\/ferdinand99\.github\.io\/fluxer\/desktop\/canary\/[^/]+\/[^/]+/,
+				baseUrl,
+			);
 			return fetch(url, init);
 		},
 		require: (specifier) => {

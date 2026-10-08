@@ -189,7 +189,7 @@ describe('the main window only ever loads the local app document', () => {
 
 	test('a deep link reaches the renderer as an in-app path, never as a document to load', async () => {
 		assert.doesNotMatch(readMainSource('DeepLinks.ts'), /\.loadURL\(|\.loadFile\(/);
-		for (const deepLink of ['fluxer://channels/@me', 'fluxer://evil.example/https://evil.example', 'fluxer://-/x']) {
+		for (const deepLink of ['fluxins://channels/@me', 'fluxins://evil.example/https://evil.example', 'fluxins://-/x']) {
 			ipcHandlers.delete('get-initial-deep-link');
 			withArgv([...HOSTILE_ARGV, deepLink], () => initializeDeepLinks());
 			const payload = await ipcHandlers.get('get-initial-deep-link')();

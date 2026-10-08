@@ -25,7 +25,8 @@ export const CHANNEL_APP_URLS: Record<BuildChannel, string> = {
 export const LOCAL_DEVELOPMENT_INSTANCE_URL = BUILD_CHANNEL === 'development' ? DEVELOPMENT_APP_URL : null;
 export const DOWNLOAD_PAGE_URLS: Record<BuildChannel, string> = {
 	stable: 'https://github.com/Ferdinand99/fluxer/releases',
-	canary: 'https://github.com/Ferdinand99/fluxer/releases',
+	// The canary channel is not published; it only needs its own distinct page.
+	canary: 'https://ferdinand99.github.io/fluxer/canary',
 	development: 'http://localhost:8088/download',
 };
 export const STABLE_MIGRATED_APP_ORIGIN = 'https://fluxer.com';

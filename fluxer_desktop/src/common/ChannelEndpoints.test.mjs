@@ -16,16 +16,16 @@ describe('where each channel points', () => {
 	});
 
 	test('the development build never claims the production deep link scheme', () => {
-		assert.equal(CHANNEL_APP_PROTOCOLS.stable, 'fluxer');
-		assert.equal(CHANNEL_APP_PROTOCOLS.canary, 'fluxer');
-		assert.notEqual(CHANNEL_APP_PROTOCOLS.development, 'fluxer');
+		assert.equal(CHANNEL_APP_PROTOCOLS.stable, 'fluxins');
+		assert.equal(CHANNEL_APP_PROTOCOLS.canary, 'fluxins');
+		assert.notEqual(CHANNEL_APP_PROTOCOLS.development, 'fluxins');
 		assert.match(CHANNEL_APP_PROTOCOLS.development, /^[a-z][a-z0-9+.-]*$/u);
 	});
 
 	test('every channel maps to its own download page', () => {
 		assert.deepEqual(DOWNLOAD_PAGE_URLS, {
-			stable: 'https://fluxer.app/download',
-			canary: 'https://canary.fluxer.app/download',
+			stable: 'https://github.com/Ferdinand99/fluxer/releases',
+			canary: 'https://ferdinand99.github.io/fluxer/canary',
 			development: 'http://localhost:8088/download',
 		});
 	});
