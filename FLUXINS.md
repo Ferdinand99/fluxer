@@ -23,8 +23,9 @@ The desktop client follows upstream's architecture:
 - **Verified instances**: the instance picker lists Fluxer (official) and `fluxer.opland.net` with the
   verified badge, and a fresh install shows the Opland instance as a fixed entry
   (`fluxer_app/src/features/auth/flow/instance_selector/FluxinsVerifiedInstances.ts`).
-- **Package origin**: `https://ferdinand99.github.io/fluxer` (`CHANNEL_PACKAGE_ORIGINS` in
-  `fluxer_desktop/src/main/ShellDownloadFormats.ts`), served from the `gh-pages` branch.
+- **Package origin**: `https://raw.githubusercontent.com/Ferdinand99/fluxer/package-origin` (`CHANNEL_PACKAGE_ORIGINS` in
+  `fluxer_desktop/src/main/ShellDownloadFormats.ts`), the `package-origin` branch served through
+  raw.githubusercontent.com. GitHub Pages is disabled on forks of this repository, so Pages is not used.
 - **Shell updates**: Windows installs update through Velopack from this repository's GitHub releases
   (`VELOPACK_UPDATE_SOURCE`, keep it the plain repository URL). macOS builds are unsigned and fall back
   to the download page (`MAC_SELF_UPDATE_ENABLED` in `ShellUpdateCapability.ts`).
@@ -46,7 +47,7 @@ unless you pass `build_version`. The workflow:
    (`scripts/fluxins/relocate-module-packages.mjs`), because the renderer module is larger than the 100 MB
    file limit of a git branch,
 4. publishes a GitHub release with the installers, the Velopack feed and the module packages,
-5. publishes the small `modules.json` files to the `gh-pages` branch (the package origin).
+5. publishes the small `modules.json` files to the `package-origin` branch (the package origin).
 
 | Platform | File | Notes |
 | --- | --- | --- |
@@ -56,8 +57,9 @@ unless you pass `build_version`. The workflow:
 
 The release also contains the Velopack feed (`releases.win.json`, `RELEASES`, `*-full.nupkg`).
 
-One-time setup for the package origin: Settings -> Pages -> Deploy from a branch -> `gh-pages` / root.
-The workflow rewrites `gh-pages` as a single commit on every release; it only contains the manifests. The
+The package origin needs no setup: the workflow creates the `package-origin` branch on the first release and
+rewrites it as a single commit on every release; it only contains the manifests. raw.githubusercontent.com
+caches for a few minutes, so a new manifest can take that long to reach clients. The
 manifest is shared by every installed client, so a pre-release also changes the modules that clients download.
 Old module packages stay available as assets of the releases that published them.
 
