@@ -25,7 +25,7 @@ describe('where each channel points', () => {
 	test('every channel maps to its own download page', () => {
 		assert.deepEqual(DOWNLOAD_PAGE_URLS, {
 			stable: 'https://github.com/Ferdinand99/fluxer/releases',
-			canary: 'https://ferdinand99.github.io/fluxer/canary',
+			canary: 'https://raw.githubusercontent.com/Ferdinand99/fluxer/package-origin/canary',
 			development: 'http://localhost:8088/download',
 		});
 	});

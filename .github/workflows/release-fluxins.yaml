@@ -5,7 +5,7 @@ name: release fluxins
 # The client is a shell (Electron) plus a web renderer that is split into modules. This workflow
 #   1. builds the renderer once and packs it into modules (Linux job),
 #   2. builds the shell for Windows x64 and macOS arm64 around the shared renderer,
-#   3. publishes the module manifests and packages to GitHub Pages (the client's package origin),
+#   3. publishes the module manifests to the package-origin branch (the client's package origin),
 #   4. publishes the installers and the Velopack update feed as a GitHub release.
 #
 # Run it from Actions -> release fluxins -> Run workflow. Versions are CalVer (YYYY.MDD.MICRO) taken
@@ -38,8 +38,9 @@ env:
   BUILD_CHANNEL: stable
   CARGO_INCREMENTAL: '0'
   # Where the client looks for modules.json and the module packages (CHANNEL_PACKAGE_ORIGINS in
-  # fluxer_desktop/src/main/ShellDownloadFormats.ts). Served from the gh-pages branch.
-  PKGS_DOWNLOAD_BASE_URL: https://ferdinand99.github.io/fluxer
+  # fluxer_desktop/src/main/ShellDownloadFormats.ts). Served from the package-origin branch through
+  # raw.githubusercontent.com, because GitHub Pages is disabled on forks of this repository.
+  PKGS_DOWNLOAD_BASE_URL: https://raw.githubusercontent.com/Ferdinand99/fluxer/package-origin
 
 jobs:
   meta:
@@ -465,8 +466,8 @@ jobs:
           done
           find payload_tree -maxdepth 6 | sort | head -60
 
-      # The module packages are larger than the 100 MB file limit of the gh-pages branch, so they ship as
-      # release assets and modules.json points at them. Only the small manifests stay on GitHub Pages.
+      # The module packages are larger than the 100 MB file limit of a git branch, so they ship as
+      # release assets and modules.json points at them. Only the small manifests go on the branch.
       - name: Move module packages to release assets
         run: >-
           node scripts/fluxins/relocate-module-packages.mjs payload_tree/desktop stable module-assets
@@ -488,7 +489,7 @@ jobs:
             --generate-notes \
             "${flags[@]}"
 
-      - name: Publish package origin to GitHub Pages
+      - name: Publish package origin branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -501,9 +502,9 @@ jobs:
           touch pages/.nojekyll
           find pages -type f | sort
           cd pages
-          git init -q -b gh-pages
+          git init -q -b package-origin
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -q -m "Publish desktop package origin $VERSION"
-          git push --force "$repo" gh-pages
+          git push --force "$repo" package-origin

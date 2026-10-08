@@ -191,7 +191,7 @@ function loadUpdater({
 		setImmediate,
 		fetch: (input, init) => {
 			const url = String(input).replace(
-				/https:\/\/ferdinand99\.github\.io\/fluxer\/desktop\/canary\/[^/]+\/[^/]+/,
+				/https:\/\/raw\.githubusercontent\.com\/Ferdinand99\/fluxer\/package-origin\/desktop\/canary\/[^/]+\/[^/]+/,
 				baseUrl,
 			);
 			return fetch(url, init);

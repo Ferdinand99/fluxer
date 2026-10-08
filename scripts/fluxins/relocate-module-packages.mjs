@@ -3,9 +3,9 @@
 // Moves the desktop module packages out of the package-origin tree and into a flat directory that is
 // attached to the GitHub release, then points every modules.json at the release assets.
 //
-// GitHub Pages is served from a git branch, and git rejects files above 100 MB (the renderer module is
+// The package origin is a git branch, and git rejects files above 100 MB (the renderer module is
 // larger). The client only needs the package URLs to be https, so the small modules.json files stay on
-// Pages while the packages are downloaded from the release.
+// the branch while the packages are downloaded from the release.
 //
 // Usage: node relocate-module-packages.mjs <payload-root> <channel> <out-dir> <release-download-base-url>
 
