@@ -41,9 +41,12 @@ unless you pass `build_version`. The workflow:
    `split_modules`, `pack_modules`),
 2. builds the shell for Windows x64 and macOS arm64 around that renderer and packages it
    (electron-builder, plus Velopack on Windows),
-3. writes `modules.json` for each platform and publishes the manifests and module packages to the
-   `gh-pages` branch (the package origin),
-4. publishes a GitHub release with the installers and the Velopack feed.
+3. writes `modules.json` for each platform and moves the module packages out of the package origin tree:
+   they are attached to the GitHub release and `modules.json` points at those assets
+   (`scripts/fluxins/relocate-module-packages.mjs`), because the renderer module is larger than the 100 MB
+   file limit of a git branch,
+4. publishes a GitHub release with the installers, the Velopack feed and the module packages,
+5. publishes the small `modules.json` files to the `gh-pages` branch (the package origin).
 
 | Platform | File | Notes |
 | --- | --- | --- |
@@ -54,8 +57,9 @@ unless you pass `build_version`. The workflow:
 The release also contains the Velopack feed (`releases.win.json`, `RELEASES`, `*-full.nupkg`).
 
 One-time setup for the package origin: Settings -> Pages -> Deploy from a branch -> `gh-pages` / root.
-The workflow rewrites `gh-pages` as a single commit on every release and keeps the module packages of
-earlier releases.
+The workflow rewrites `gh-pages` as a single commit on every release; it only contains the manifests. The
+manifest is shared by every installed client, so a pre-release also changes the modules that clients download.
+Old module packages stay available as assets of the releases that published them.
 
 ### Windows updates
 
