@@ -19,7 +19,7 @@ import KeybindsTab from '@app/features/user/components/modals/tabs/KeybindsTab';
 import LanguageTab from '@app/features/user/components/modals/tabs/LanguageTab';
 import LinkedAccountsTab from '@app/features/user/components/modals/tabs/LinkedAccountsTab';
 import MyProfileTab from '@app/features/user/components/modals/tabs/MyProfileTab';
-import {NotificationsInlineContent} from '@app/features/user/components/modals/tabs/notifications_tab/NotificationsTabInline';
+import {NotificationsInlineContent} from '@app/features/user/components/modals/tabs/NotificationsTab';
 import {PlutoniumInlineTab} from '@app/features/user/components/modals/tabs/PlutoniumTab';
 import {PrivacyDashboardContent} from '@app/features/user/components/modals/tabs/privacy_safety_tab/PrivacySafetyTabInline';
 import {VoiceVideoInlineContent} from '@app/features/user/components/modals/tabs/voice_video_tab/VoiceVideoTabInline';
@@ -265,8 +265,15 @@ export const AllSettingsRenderer: React.FC<AllSettingsRendererProps> = observer(
 			>
 				<div className={styles.resultsHeader} data-flx="app.all-settings-renderer.results-header">
 					<Trans>
-						Found <Plural value={resultCount} one="# result" other="# results" /> in{' '}
-						<Plural value={categoryCount} one="# category" other="# categories" />
+						Found{' '}
+						<Plural value={resultCount} one="# result" other="# results" data-flx="app.all-settings-renderer.plural" />{' '}
+						in{' '}
+						<Plural
+							value={categoryCount}
+							one="# category"
+							other="# categories"
+							data-flx="app.all-settings-renderer.plural--2"
+						/>
 					</Trans>
 				</div>
 				{searchResults.map((result) => (

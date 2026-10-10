@@ -4,7 +4,6 @@ import {AdminAuditReadActions} from '@app/api/admin/AdminAuditActions';
 import {recordAdminRead, recordAdminWrite} from '@app/api/admin/AdminAuditRecorder';
 import {createUserID} from '@app/api/BrandedTypes';
 import {Config} from '@app/api/Config';
-import {enqueueRebuildThreadAutoArchiveQueue, enqueueThreadSearchBackfill} from '@app/api/channel/threads/ThreadJobs';
 import {
 	type InstancePolicyConfig,
 	REGISTRATION_PENDING_APPROVAL_TRAIT,
@@ -15,7 +14,6 @@ import {requireAdminACL} from '@app/api/middleware/AdminMiddleware';
 import {RateLimitMiddleware} from '@app/api/middleware/RateLimitMiddleware';
 import {OpenAPI} from '@app/api/middleware/ResponseTypeMiddleware';
 import {
-	getChannelThreadsConfigPublisher,
 	getGatewayRolloutConfigPublisher,
 	getInstanceConfigRepository,
 	getPushRelayConfigPublisher,
@@ -23,11 +21,6 @@ import {
 import {RateLimitConfigs} from '@app/api/RateLimitConfig';
 import type {HonoApp, HonoEnv} from '@app/api/types/HonoEnv';
 import {Validator} from '@app/api/Validator';
-import {
-	enabledThreadGuildIds,
-	enqueueThreadPermissionSeeds,
-	newlyEnabledThreadGuildIds,
-} from '@app/api/worker/tasks/SeedThreadPermissions';
 import {AdminACLs} from '@fluxer/constants/src/AdminACLs';
 import {InputValidationError} from '@fluxer/errors/src/domains/core/InputValidationError';
 import {InstancePolicyTransitionNotAllowedError} from '@fluxer/errors/src/domains/core/InstancePolicyTransitionNotAllowedError';
@@ -42,14 +35,10 @@ import {
 	PendingRegistrationActionRequest,
 	RegistrationUrlIdParam,
 } from '@fluxer/schema/src/domains/admin/AdminSchemas';
-import {
-	applyChannelThreadsConfigUpdate,
-	type ChannelThreadsConfig,
-} from '@fluxer/schema/src/domains/admin/ChannelThreadsSchemas';
 import {DomainMigrationConfigSchema} from '@fluxer/schema/src/domains/admin/DomainMigrationSchemas';
 import {GatewayRolloutConfigSchema} from '@fluxer/schema/src/domains/admin/GatewayRolloutSchemas';
-import {PlutoniumPageConfigSchema} from '@fluxer/schema/src/domains/admin/PlutoniumPageSchemas';
 import type {PushRelayConfig, PushRelayConfigUpdateRequest} from '@fluxer/schema/src/domains/admin/PushRelaySchemas';
+import {VoiceP2pConfigSchema} from '@fluxer/schema/src/domains/admin/VoiceP2pSchemas';
 import {UserIdParam} from '@fluxer/schema/src/domains/common/CommonParamSchemas';
 import {ExperimentDeliveryConfigSchema} from '@fluxer/schema/src/domains/experiment/ExperimentSchemas';
 import type {InstanceBranding} from '@fluxer/schema/src/domains/instance/InstanceSchemas';
@@ -78,9 +67,8 @@ async function buildInstanceConfigResponse(): Promise<InstanceConfigResponse> {
 		gatewayRollout,
 		pushRelay,
 		domainMigration,
-		plutoniumPage,
+		voiceP2p,
 		captcha,
-		channelThreads,
 		experimentDelivery,
 		registrationConfig,
 		registrationUrls,
@@ -90,9 +78,8 @@ async function buildInstanceConfigResponse(): Promise<InstanceConfigResponse> {
 		instanceConfigRepository.getGatewayRolloutConfig(),
 		instanceConfigRepository.getPushRelayConfig(),
 		instanceConfigRepository.getDomainMigrationConfig(),
-		instanceConfigRepository.getPlutoniumPageConfig(),
+		instanceConfigRepository.getVoiceP2pConfig(),
 		instanceConfigRepository.getCaptchaConfig(),
-		instanceConfigRepository.getChannelThreadsConfig(),
 		instanceConfigRepository.getExperimentDeliveryConfig(),
 		instanceConfigRepository.getRegistrationConfig(),
 		instanceConfigRepository.getRegistrationUrlsForAdmin(),
@@ -129,9 +116,8 @@ async function buildInstanceConfigResponse(): Promise<InstanceConfigResponse> {
 		gateway_rollout: gatewayRollout,
 		push_relay: pushRelay,
 		domain_migration: domainMigration,
-		plutonium_page: plutoniumPage,
+		voice_p2p: voiceP2p,
 		captcha,
-		channel_threads: channelThreads,
 		experiment_delivery: experimentDelivery,
 		registration: {
 			...registrationConfig,
@@ -414,11 +400,11 @@ export function InstanceConfigAdminController(app: HonoApp) {
 					);
 				}
 			}
-			if (data.plutonium_page) {
-				const patch = omitUndefinedFields(data.plutonium_page);
+			if (data.voice_p2p) {
+				const patch = omitUndefinedFields(data.voice_p2p);
 				if (Object.keys(patch).length > 0) {
-					await instanceConfigRepository.updatePlutoniumPageConfig((current) =>
-						PlutoniumPageConfigSchema.parse({
+					await instanceConfigRepository.updateVoiceP2pConfig((current) =>
+						VoiceP2pConfigSchema.parse({
 							...current,
 							...patch,
 							config_version: current.config_version + 1,
@@ -430,25 +416,6 @@ export function InstanceConfigAdminController(app: HonoApp) {
 				const patch = omitUndefinedFields(data.captcha);
 				if (Object.keys(patch).length > 0) {
 					await instanceConfigRepository.updateCaptchaConfig(patch);
-				}
-			}
-			let channelThreadsConfigVersion: number | undefined;
-			if (data.channel_threads) {
-				const patch = omitUndefinedFields(data.channel_threads);
-				if (Object.keys(patch).length > 0) {
-					let previous: ChannelThreadsConfig | undefined;
-					const landed = await instanceConfigRepository.updateChannelThreadsConfig((current) => {
-						previous = current;
-						return applyChannelThreadsConfigUpdate(current, patch);
-					});
-					channelThreadsConfigVersion = landed.config_version;
-					await enqueueThreadPermissionSeeds(ctx.get('channelRepository').threads, landed);
-					const newlyEnabled = previous ? newlyEnabledThreadGuildIds(previous, landed) : enabledThreadGuildIds(landed);
-					for (const guildId of newlyEnabled) {
-						await enqueueRebuildThreadAutoArchiveQueue(guildId);
-						await enqueueThreadSearchBackfill(guildId);
-					}
-					await getChannelThreadsConfigPublisher().publish(landed);
 				}
 			}
 			if (data.experiment_delivery) {
@@ -528,6 +495,7 @@ export function InstanceConfigAdminController(app: HonoApp) {
 						? omitUndefinedFields({
 								terms_url: readOptionalField(data.app_public.legal, 'terms_url'),
 								privacy_url: readOptionalField(data.app_public.legal, 'privacy_url'),
+								guidelines_url: readOptionalField(data.app_public.legal, 'guidelines_url'),
 							})
 						: undefined,
 					registration: data.app_public.registration
@@ -646,7 +614,6 @@ export function InstanceConfigAdminController(app: HonoApp) {
 				action: 'update_instance_config',
 				metadata: {
 					sections: listSuppliedSections(data),
-					channel_threads_config_version: channelThreadsConfigVersion?.toString(),
 					granted_acls: grantedSetupCompleterAdmin ? AdminACLs.WILDCARD : undefined,
 				},
 			});

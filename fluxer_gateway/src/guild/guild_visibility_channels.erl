@@ -7,17 +7,14 @@
     get_user_viewable_channels/2,
     shares_viewable_channel/3,
     viewable_channel_set/2,
-    have_shared_viewable_channel/3,
     viewable_channel_map/1,
     get_cached_viewable_channel_map/2,
     cached_viewable_channel_set/3,
-    connected_voice_channel_set/2,
     connected_voice_channel_sets/1,
     preserve_connected_channels/4,
     filter_connected_session_entries/1,
     ensure_viewable_channel_map/3,
     channel_is_visible/4,
-    ensure_new_channel_visibility/4,
     ensure_new_channel_visibility/5,
     update_viewable_map_for_channel/3
 ]).
@@ -177,25 +174,6 @@ try_extract_viewable(UserId, SessionData) ->
             undefined
     end.
 
--spec have_shared_viewable_channel(user_id(), user_id(), guild_state()) -> boolean().
-have_shared_viewable_channel(UserId, OtherUserId, State) when
-    is_integer(UserId), is_integer(OtherUserId), UserId =/= OtherUserId
-->
-    MapA = cached_or_current_viewable_channel_map(UserId, State),
-    ListB = get_user_viewable_channels(OtherUserId, State),
-    lists:any(fun(ChId) -> maps:is_key(ChId, MapA) end, ListB);
-have_shared_viewable_channel(_, _, _) ->
-    false.
-
--spec cached_or_current_viewable_channel_map(user_id(), guild_state()) -> map().
-cached_or_current_viewable_channel_map(UserId, State) ->
-    case get_cached_viewable_channel_map(UserId, State) of
-        undefined ->
-            viewable_channel_map(sets:from_list(get_user_viewable_channels(UserId, State)));
-        Map ->
-            Map
-    end.
-
 -spec filter_connected_session_entries(map()) -> [{binary(), map()}].
 filter_connected_session_entries(Sessions) ->
     maps:fold(fun collect_connected_session/3, [], Sessions).
@@ -230,10 +208,6 @@ viewable_channel_map(ChannelSet) ->
         #{},
         ChannelSet
     ).
-
--spec connected_voice_channel_set(user_id(), guild_state()) -> sets:set(channel_id()).
-connected_voice_channel_set(UserId, State) ->
-    maps:get(UserId, connected_voice_channel_sets(State), sets:new()).
 
 -spec connected_voice_channel_sets(guild_state()) -> #{user_id() => sets:set(channel_id())}.
 connected_voice_channel_sets(State) ->
@@ -298,13 +272,6 @@ ensure_viewable_channel_map(SessionData, UserId, State) ->
     boolean().
 channel_is_visible(UserId, ChannelId, Member, State) ->
     guild_permissions:can_view_channel(UserId, ChannelId, Member, State).
-
--spec ensure_new_channel_visibility(
-    user_id(), channel_id(), sets:set(channel_id()), guild_state()
-) -> {guild_state(), boolean()}.
-ensure_new_channel_visibility(UserId, ChannelId, ConnectedSet, State) ->
-    NewMember = guild_permissions:find_member_by_user_id(UserId, State),
-    ensure_new_channel_visibility(UserId, ChannelId, ConnectedSet, NewMember, State).
 
 -spec ensure_new_channel_visibility(
     user_id(), channel_id(), sets:set(channel_id()), map() | undefined, guild_state()

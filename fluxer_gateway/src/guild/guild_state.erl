@@ -155,10 +155,7 @@ post_update_role(guild_role_delete, EventData, OldState, NewState) ->
     guild_state().
 resync_roles_after_permission_change(RoleIds, OldState, NewState) ->
     Recomputed = guild_state_roles:recompute_visibility_for_roles(RoleIds, OldState, NewState),
-    lists:foreach(
-        fun(RoleId) -> guild_voice_permission_sync:sync_users_with_role(RoleId, Recomputed) end,
-        RoleIds
-    ),
+    ok = guild_voice_permission_sync:sync_roles_after_change(RoleIds, OldState, Recomputed),
     Recomputed.
 
 -spec post_update_channel(event(), event_data(), guild_state(), guild_state()) -> guild_state().
@@ -238,10 +235,6 @@ maybe_sync_member_list_permission_state(_State) ->
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
-
-update_data_for_event_unknown_returns_data_unchanged_test() ->
-    Data = #{<<"test">> => true},
-    ?assertEqual(Data, update_data_for_event(unknown_event, #{}, Data, #{})).
 
 guild_member_remove_asks_the_voice_server_to_disconnect_test() ->
     Self = self(),

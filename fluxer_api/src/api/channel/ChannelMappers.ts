@@ -120,6 +120,7 @@ function serializeGuildVoiceChannel(channel: Channel, ctx: ContentWarningCtx): C
 		user_limit: channel.userLimit,
 		voice_connection_limit: channel.voiceConnectionLimit,
 		rtc_region: channel.rtcRegion,
+		rtc_p2p: channel.rtcP2p,
 		...serializeContentWarningFields(channel, ctx),
 		rate_limit_per_user: channel.rateLimitPerUser,
 	};
@@ -165,6 +166,7 @@ function serializeGroupDMChannel(channel: Channel): ChannelResponse {
 		icon: channel.iconHash ?? null,
 		owner_id: channel.ownerId ? channel.ownerId.toString() : null,
 		nicks: nicknameMap.size > 0 ? nicks : undefined,
+		nsfw: channel.isNsfw,
 	};
 }
 

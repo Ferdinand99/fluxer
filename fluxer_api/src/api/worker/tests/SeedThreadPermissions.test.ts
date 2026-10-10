@@ -8,7 +8,7 @@ import {fetchOne} from '@app/api/database/CassandraQueryExecution';
 import type {GuildThreadStateRow} from '@app/api/database/types/ThreadTypes';
 import {
 	clearChannelThreadsTaintCacheForTesting,
-	syncChannelThreadsConfig,
+	pinChannelThreadsConfigForTesting,
 } from '@app/api/experiment/ChannelThreadsGate';
 import {addMemberRole, createGuild, createRole} from '@app/api/guild/tests/GuildTestUtils';
 import type {IGatewayService} from '@app/api/infrastructure/IGatewayService';
@@ -35,12 +35,8 @@ import type {ChannelResponse} from '@fluxer/schema/src/domains/channel/ChannelSc
 import type {WorkerTaskHelpers} from '@pkgs/worker/src/contracts/WorkerTask';
 import {afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
 
-function parseConfig(raw: string | null): ChannelThreadsConfig {
-	return ChannelThreadsConfigSchema.parse(raw ? JSON.parse(raw) : {});
-}
-
 function setConfig(patch: Partial<ChannelThreadsConfig> | null): void {
-	syncChannelThreadsConfig(patch === null ? null : JSON.stringify(patch), parseConfig);
+	pinChannelThreadsConfigForTesting(ChannelThreadsConfigSchema.parse(patch ?? {}));
 	clearChannelThreadsTaintCacheForTesting();
 }
 
@@ -98,8 +94,8 @@ describe('seedThreadPermissions', () => {
 			})
 			.execute();
 		const channelRepository = getChannelRepository();
-		const stored = await channelRepository.findUnique(createChannelID(BigInt(channel.id)));
-		await channelRepository.upsert({
+		const stored = await channelRepository.channelData.findUnique(createChannelID(BigInt(channel.id)));
+		await channelRepository.channelData.upsert({
 			...stored!.toRow(),
 			permission_overwrites: new Map([
 				[
@@ -122,9 +118,9 @@ describe('seedThreadPermissions', () => {
 		await seedThreadPermissions({guildId: guild.id}, helpers());
 		const everyone = await getGuildRepository().getRole(createRoleID(BigInt(guild.id)), guildId);
 		expect(everyone?.permissions).toBe(DEFAULT_PERMISSIONS | DEFAULT_THREAD_PERMISSIONS);
-		const seeded = (await channelRepository.findUnique(createChannelID(BigInt(channel.id))))!.permissionOverwrites.get(
-			createRoleID(BigInt(guild.id)),
-		);
+		const seeded = (await channelRepository.channelData.findUnique(
+			createChannelID(BigInt(channel.id)),
+		))!.permissionOverwrites.get(createRoleID(BigInt(guild.id)));
 		expect(seeded?.allow).toBe(0n);
 		expect(seeded?.deny).toBe(Permissions.SEND_MESSAGES | DEFAULT_THREAD_PERMISSIONS);
 		expect(dispatchGuild.mock.calls.map(([params]) => params.event)).toEqual([
@@ -170,7 +166,7 @@ describe('seedThreadPermissions', () => {
 		setConfig({...ALL_THREADS_ACTIVE, ever_enabled: true, enabled_guild_ids: [guild.id]});
 		await seedThreadPermissions({guildId: guild.id}, helpers());
 
-		const seeded = (await getChannelRepository().findUnique(
+		const seeded = (await getChannelRepository().channelData.findUnique(
 			createChannelID(BigInt(channel.id)),
 		))!.permissionOverwrites.get(createRoleID(BigInt(role.id)));
 		expect(seeded?.allow).toBe(Permissions.SEND_MESSAGES | DEFAULT_THREAD_PERMISSIONS);
@@ -195,22 +191,19 @@ describe('seedThreadPermissions', () => {
 		const owner = await createTestAccount(harness);
 		const guild = await createGuild(harness, owner.token, 'Lagging');
 		const guildId = createGuildID(BigInt(guild.id));
-		const landed = await getInstanceConfigRepository().updateChannelThreadsConfig((current) =>
-			ChannelThreadsConfigSchema.parse({
-				enabled: true,
-				ever_enabled: true,
-				enabled_guild_ids: [guild.id],
-				config_version: current.config_version + 1,
-			}),
+		const storedVersion = 5;
+		await getInstanceConfigRepository().setConfig(
+			'channel_threads_config',
+			JSON.stringify(ChannelThreadsConfigSchema.parse({enabled: false, config_version: storedVersion})),
 		);
-		setConfig(null);
+		pinChannelThreadsConfigForTesting(null);
 
 		await expect(
-			seedThreadPermissions({guildId: guild.id, configVersion: landed.config_version + 1}, helpers()),
+			seedThreadPermissions({guildId: guild.id, configVersion: storedVersion + 1}, helpers()),
 		).rejects.toThrow();
-		setConfig(null);
+		pinChannelThreadsConfigForTesting(null);
 
-		await seedThreadPermissions({guildId: guild.id, configVersion: landed.config_version}, helpers());
+		await seedThreadPermissions({guildId: guild.id, configVersion: storedVersion}, helpers());
 		const marker = await fetchOne<GuildThreadStateRow>(
 			GuildThreadState.selectCql({where: GuildThreadState.where.eq('guild_id'), limit: 1}),
 			{guild_id: guildId},

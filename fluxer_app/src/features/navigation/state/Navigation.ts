@@ -58,14 +58,6 @@ class Navigation {
 		return this.currentLocation?.pathname ?? '';
 	}
 
-	get search(): string {
-		return this.currentLocation?.search ?? '';
-	}
-
-	get hash(): string {
-		return this.currentLocation?.hash ?? '';
-	}
-
 	get context(): 'dm' | 'favorites' | 'guild' {
 		const guildId = this.guildId;
 		if (!guildId || guildId === ME) return 'dm';
@@ -111,26 +103,6 @@ class Navigation {
 		}
 		logger.debug(`clearMessageIdForChannel: ${path} (${mode})`);
 		this.applyNavigation(path, mode);
-	}
-
-	buildChannelPath(guildId: string | null | undefined, channelId: string): string {
-		if (!guildId || guildId === ME) {
-			return Routes.dmChannel(channelId);
-		}
-		if (guildId === '@favorites') {
-			return Routes.favoritesChannel(channelId);
-		}
-		return Routes.guildChannel(guildId, channelId);
-	}
-
-	buildMessagePath(guildId: string | null | undefined, channelId: string, messageId: string): string {
-		if (!guildId || guildId === ME) {
-			return Routes.dmChannelMessage(channelId, messageId);
-		}
-		if (guildId === '@favorites') {
-			return Routes.favoritesChannelMessage(channelId, messageId);
-		}
-		return Routes.channelMessage(guildId, channelId, messageId);
 	}
 
 	private buildGuildPath(guildId: string, channelId?: string, messageId?: string): string {

@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {createChannelID, createGuildID, createUserID} from '@app/api/BrandedTypes';
-import type {IChannelRepositoryAggregate} from '@app/api/channel/repositories/IChannelRepositoryAggregate';
+import type {ChannelRepository} from '@app/api/channel/ChannelRepository';
 import {ChannelAuthService} from '@app/api/channel/services/channel_data/ChannelAuthService';
 import {
 	SYSTEM_THREAD_VIEWER,
 	syncChannelThreadsConfig,
 	type ThreadViewer,
 } from '@app/api/experiment/ChannelThreadsGate';
-import type {IGuildRepositoryAggregate} from '@app/api/guild/repositories/IGuildRepositoryAggregate';
+import type {GuildRepository} from '@app/api/guild/repositories/GuildRepository';
 import type {IGatewayService} from '@app/api/infrastructure/IGatewayService';
 import type {Channel} from '@app/api/models/Channel';
-import type {IUserRepository} from '@app/api/user/IUserRepository';
+import type {UserRepository} from '@app/api/user/repositories/UserRepository';
 import {ChannelTypes} from '@fluxer/constants/src/ChannelConstants';
 import {UnknownChannelError} from '@fluxer/errors/src/domains/channel/UnknownChannelError';
 import {ChannelThreadsConfigSchema} from '@fluxer/schema/src/domains/admin/ChannelThreadsSchemas';
-import {afterEach, describe, expect, it} from 'vitest';
+import {beforeEach, describe, expect, it} from 'vitest';
 
 const GUILD_ID = createGuildID(100n);
 const CHANNEL_ID = createChannelID(300n);
@@ -27,7 +27,7 @@ function createService(type: number): ChannelAuthService {
 	const channelRepository = {
 		channelData: {findUnique: async () => channel},
 		threads: {getState: async () => null, getMember: async () => null},
-	} as unknown as IChannelRepositoryAggregate;
+	} as unknown as ChannelRepository;
 	const gatewayService = {
 		getGuildAuthContext: async () => {
 			throw REACHED_GATEWAY;
@@ -36,12 +36,7 @@ function createService(type: number): ChannelAuthService {
 			throw REACHED_GATEWAY;
 		},
 	} as unknown as IGatewayService;
-	return new ChannelAuthService(
-		channelRepository,
-		{} as IUserRepository,
-		{} as IGuildRepositoryAggregate,
-		gatewayService,
-	);
+	return new ChannelAuthService(channelRepository, {} as UserRepository, {} as GuildRepository, gatewayService);
 }
 
 function enroll(): void {
@@ -54,7 +49,7 @@ function enroll(): void {
 const capableViewer: ThreadViewer = {kind: 'user', userId: USER_ID, bot: false, capable: true};
 
 describe('getChannelAuthenticated thread gate', () => {
-	afterEach(() => {
+	beforeEach(() => {
 		syncChannelThreadsConfig(null, () => ChannelThreadsConfigSchema.parse({}));
 	});
 

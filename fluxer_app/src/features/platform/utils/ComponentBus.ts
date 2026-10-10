@@ -64,28 +64,12 @@ class Dispatch extends EventEmitter<ComponentBusEvents> {
 		this.emit(type, args);
 	}
 
-	dispatchToNewestSubscriber(type: ComponentActionType, args?: unknown) {
-		const listeners = this.listeners(type);
-		if (listeners.length > 0) {
-			listeners[listeners.length - 1](args);
-		}
-	}
-
 	dispatchToFirstResult(type: ComponentActionType, args: unknown, predicate: (result: unknown) => boolean): unknown {
 		for (const listener of this.listeners(type)) {
 			const result = listener(args);
 			if (predicate(result)) return result;
 		}
 		return undefined;
-	}
-
-	dispatchToFirst(types: Array<ComponentActionType>, args?: unknown) {
-		for (const type of types) {
-			if (this.hasSubscribers(type)) {
-				this.dispatch(type, args);
-				break;
-			}
-		}
 	}
 
 	hasSubscribers(type: ComponentActionType) {
@@ -115,20 +99,8 @@ class Dispatch extends EventEmitter<ComponentBusEvents> {
 		};
 	}
 
-	subscribeOnce(type: ComponentActionType, callback: (...args: Array<unknown>) => void): () => void {
-		this.once(type, callback);
-		this.flushBufferedDispatches(type);
-		return () => {
-			this.unsubscribe(type, callback);
-		};
-	}
-
 	unsubscribe(type: ComponentActionType, callback: (...args: Array<unknown>) => void) {
 		this.removeListener(type, callback);
-	}
-
-	reset() {
-		this.removeAllListeners();
 	}
 }
 

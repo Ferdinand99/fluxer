@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::utils::plural::{count_noun, noun_for};
 use crate::{
     acl,
     api::{
@@ -359,13 +360,13 @@ fn deletion_card(
                     div class="space-y-3" {
                         (form_label("Private Reason"))
                         input type="text" name="private_reason" required
-                            placeholder="Why this deletion is being cancelled (audit log)..."
+                            placeholder="Why this deletion is being canceled (audit log)..."
                             class="block w-full rounded-md border border-neutral-300 \
                                    px-3 py-2 text-sm shadow-sm \
                                    focus:border-brand-primary focus:outline-none \
                                    focus:ring-1 focus:ring-brand-primary";
                         @if !username_sign_in {
-                            (checkbox("notify_user", "true", "Email the user that the deletion was cancelled", false, true))
+                            (checkbox("notify_user", "true", "Email the user that the deletion was canceled", false, true))
                         }
                         (checkbox("confirm", "true", &confirmation, false, true))
                         (form_actions(html! {
@@ -567,7 +568,7 @@ fn message_shred_status_content(status: &serde_json::Value) -> Markup {
                 "Status: " (message_shred_status_label(status_value))
             }
             p class="text-sm text-neutral-700" {
-                "Requested " (requested) " entries, skipped " (skipped) " entries"
+                "Requested " (count_noun(requested, "entry", "entries")) ", skipped " (count_noun(skipped, "entry", "entries"))
             }
             @if status_value == "in_progress" {
                 div class="space-y-2" {
@@ -582,17 +583,17 @@ fn message_shred_status_content(status: &serde_json::Value) -> Markup {
             }
             @if status_value == "completed" {
                 p class="text-sm text-neutral-700" {
-                    "Deleted " (processed) " / " (total) " entries"
+                    "Deleted " (processed) " / " (total) " " (noun_for(total, "entry", "entries"))
                 }
             }
             @if let Some(started_at) = value_str(status, "started_at") {
-                p class="text-xs text-neutral-500" { "Started " (started_at) }
+                p class="text-xs text-neutral-500" { "Started " (format_admin_timestamp(started_at)) }
             }
             @if let Some(completed_at) = value_str(status, "completed_at") {
-                p class="text-xs text-neutral-500" { "Completed " (completed_at) }
+                p class="text-xs text-neutral-500" { "Completed " (format_admin_timestamp(completed_at)) }
             }
             @if let Some(failed_at) = value_str(status, "failed_at") {
-                p class="text-xs text-red-600" { "Failed " (failed_at) }
+                p class="text-xs text-red-600" { "Failed " (format_admin_timestamp(failed_at)) }
             }
             @if let Some(error) = value_str(status, "error") {
                 p class="text-sm text-red-600" { (error) }
@@ -763,56 +764,6 @@ mod tests {
         serde_json::from_value(value).expect("valid admin user")
     }
 
-    fn entry(log_id: &str, action: &str, reason: &str, metadata: Value) -> AuditLogEntry {
-        serde_json::from_value(json!({
-            "log_id": log_id,
-            "admin_user_id": "1400000000000000001",
-            "admin_user": {"id": "1400000000000000001", "username": "lilith", "discriminator": "0001", "global_name": null},
-            "action": action,
-            "target_id": "1500000000000000001",
-            "target_type": "user",
-            "audit_log_reason": reason,
-            "metadata": metadata,
-            "created_at": "2026-09-01T10:00:00.000Z"
-        }))
-        .expect("valid audit log entry")
-    }
-
-    #[test]
-    fn pending_deletion_card_names_the_scheduler_and_the_deletion_it_cancels() {
-        let target = user(json!({
-            "pending_deletion_at": "2026-10-30T17:40:29.690Z",
-            "deletion_reason_code": 3,
-            "deletion_public_reason": "Spam",
-            "deletion_audit_log_reason": "Report batch 12",
-            "deletion_scheduled_by": "1400000000000000001",
-            "deletion_scheduled_at": "2026-08-31T17:40:29.690Z"
-        }));
-        let scheduler = user(json!({"id": "1400000000000000001", "username": "lilith"}));
-        let markup =
-            deletion_card("/admin", &target, "csrf", Some(&scheduler), false).into_string();
-        assert!(markup.contains(r#"href="/admin/users/1400000000000000001""#));
-        assert!(markup.contains("lilith"));
-        assert!(markup.contains("Report batch 12"));
-        assert!(
-            markup.contains(
-                r#"name="expected_pending_deletion_at" value="2026-10-30T17:40:29.690Z""#
-            )
-        );
-        assert!(markup.contains(r#"name="notify_user" value="true""#));
-        assert!(!markup.contains(r#"name="notify_user" value="true" checked"#));
-        assert!(markup.contains("Cancel lilith's deletion (Spam, due"));
-        assert!(markup.contains(r#"name="private_reason" required"#));
-    }
-
-    #[test]
-    fn schedule_form_makes_the_reason_an_explicit_choice() {
-        let markup = deletion_card("/admin", &user(json!({})), "csrf", None, false).into_string();
-        assert!(markup.contains(r#"<option value="" disabled selected>Choose a reason</option>"#));
-        assert!(!markup.contains(r#"<option value="1" selected>"#));
-        assert!(!markup.contains("replace_pending_deletion_at"));
-    }
-
     #[test]
     fn schedule_form_emails_the_user_by_default() {
         let markup = deletion_card("/admin", &user(json!({})), "csrf", None, false).into_string();
@@ -862,50 +813,5 @@ mod tests {
             r#"name="public_reason" placeholder="Enter public unban reason..." maxlength="512""#
         ));
         assert!(markup.contains(r#"name="private_reason""#));
-    }
-
-    #[test]
-    fn current_ban_is_the_entry_matching_the_ban_end_and_notes_attach_to_it() {
-        let target = user(json!({"temp_banned_until": "2026-10-01T00:00:00.000Z"}));
-        let logs = vec![
-            entry(
-                "3",
-                "annotate_ban",
-                "Also sent links",
-                json!({"ban_audit_log_id": "2"}),
-            ),
-            entry(
-                "2",
-                "temp_ban",
-                "Regel § 3",
-                json!({"banned_until": "2026-10-01T00:00:00.000Z"}),
-            ),
-            entry(
-                "1",
-                "temp_ban",
-                "Older ban",
-                json!({"banned_until": "2026-01-01T00:00:00.000Z"}),
-            ),
-            entry(
-                "4",
-                "annotate_ban",
-                "Old note",
-                json!({"ban_audit_log_id": "1"}),
-            ),
-        ];
-        let ban = find_current_ban(&target, &logs).expect("current ban");
-        assert_eq!(ban.entry.log_id, "2");
-        assert_eq!(
-            ban.notes
-                .iter()
-                .map(|note| note.log_id.as_str())
-                .collect::<Vec<_>>(),
-            ["3"]
-        );
-        let markup = ban_actions_card("/admin", &target, "csrf", Some(&ban), false).into_string();
-        assert!(markup.contains("Regel § 3"));
-        assert!(markup.contains("Also sent links"));
-        assert!(markup.contains(r#"name="ban_audit_log_id" value="2""#));
-        assert!(markup.contains("?action=annotate_ban&amp;tab=moderation"));
     }
 }

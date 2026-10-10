@@ -3,7 +3,6 @@
 import assert from 'node:assert/strict';
 import Config from '@app/features/app/config/Config';
 import {getCachedDesktopTroubleshootingSettings} from '@app/features/devtools/utils/DesktopTroubleshootingUtils';
-import type {AppMetricsSnapshot, DesktopInfo, GpuInfo} from '@app/features/platform/types/Electron';
 import {getElectronAPI} from '@app/features/ui/utils/NativeUtils';
 import MediaEngine, {useMediaEngineVersion} from '@app/features/voice/engine/MediaEngineFacade';
 import ScreenShareCodecNegotiation, {
@@ -20,7 +19,7 @@ import {
 	collectScreenShareAudioPublicationDiagnostics,
 	type StatsForNerdsData,
 } from '@app/features/voice/utils/VoiceStatsForNerdsPresenter';
-import type {VoiceEngineV2PerTrackStats, VoiceEngineV2TransportInfo} from '@fluxer/voice_engine_v2';
+import type {AppMetricsSnapshot, DesktopInfo, GpuInfo} from '@app/types/electron.d';
 import {useEffect, useRef, useState} from 'react';
 
 export type {StatsForNerdsData} from '@app/features/voice/utils/VoiceStatsForNerdsPresenter';
@@ -62,30 +61,6 @@ class BoundedNumberHistory {
 		}
 		return out;
 	}
-}
-
-function formatTransportSummary(transport: VoiceEngineV2TransportInfo | null): string {
-	if (!transport) return 'n/a';
-	const parts: Array<string> = [];
-	if (transport.localProtocol) parts.push(transport.localProtocol.toUpperCase());
-	if (transport.localCandidateType) parts.push(transport.localCandidateType);
-	if (transport.iceState) parts.push(`ICE:${transport.iceState}`);
-	if (transport.dtlsState) parts.push(`DTLS:${transport.dtlsState}`);
-	return parts.join(' / ') || 'n/a';
-}
-
-export function formatResolution(track: VoiceEngineV2PerTrackStats | null): string {
-	if (!track?.frameWidth || !track.frameHeight) return 'n/a';
-	return `${track.frameWidth}x${track.frameHeight}`;
-}
-
-export function formatCodec(track: VoiceEngineV2PerTrackStats | null): string {
-	if (!track?.codec) return 'n/a';
-	return track.codec.replace(/^(audio|video)\//, '');
-}
-
-export function formatTransport(transport: VoiceEngineV2TransportInfo | null): string {
-	return formatTransportSummary(transport);
 }
 
 function getSystemInfo(): StatsForNerdsData['system'] {

@@ -23,13 +23,26 @@ export interface ComboboxOption<V extends Primitive = string> {
 	isDisabled?: boolean;
 }
 
+export function resolveNearestNumericOption(
+	inputValue: string,
+	options: ReadonlyArray<ComboboxOption<number>>,
+): number | undefined {
+	const numericMatch = inputValue.trim().match(/([0-9]+(?:\.[0-9]+)?)/);
+	if (!numericMatch) return undefined;
+	const parsedValue = Number(numericMatch[1]);
+	if (!Number.isFinite(parsedValue)) return undefined;
+	return options.reduce((nearest, option) =>
+		Math.abs(option.value - parsedValue) < Math.abs(nearest.value - parsedValue) ? option : nearest,
+	).value;
+}
+
 export interface ComboboxFilterOption<O> {
 	label: string;
 	value: string;
 	data: O;
 }
 
-export type ComboboxInputValueResolver<V extends Primitive, O extends ComboboxOption<V>> = (
+type ComboboxInputValueResolver<V extends Primitive, O extends ComboboxOption<V>> = (
 	inputValue: string,
 	options: ReadonlyArray<O>,
 ) => V | undefined;
@@ -69,6 +82,7 @@ export interface ComboboxProps<
 	renderValue?: (option: IsMulti extends true ? Array<O> : O | null) => React.ReactNode;
 	portalProps?: ComboboxPortalProps;
 	density?: 'default' | 'compact' | 'compactOverlay';
+	dir?: 'ltr' | 'rtl';
 	'aria-label'?: string;
 	'data-flx'?: string;
 }
@@ -169,6 +183,7 @@ export const Combobox = observer(function Combobox<
 	renderValue,
 	portalProps,
 	density = 'default',
+	dir,
 	'aria-label': ariaLabel,
 	'data-flx': dataFlx,
 }: ComboboxProps<V, IsMulti, O>) {
@@ -463,6 +478,7 @@ export const Combobox = observer(function Combobox<
 								align: 'shift',
 								fallbackAxisSide: 'none',
 							}}
+							dir={dir}
 							data-flx="ui.form.combobox.positioner"
 						>
 							<BaseCombobox.Popup
@@ -479,6 +495,7 @@ export const Combobox = observer(function Combobox<
 									overflow="auto"
 									fade={false}
 									scrollbarTrackMode="overlay"
+									dir={dir}
 									data-flx="ui.form.combobox.list-scroller"
 								>
 									<BaseCombobox.List className={styles.list} data-flx="ui.form.combobox.list">

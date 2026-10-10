@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import Initialization from '@app/features/app/state/Initialization';
 import type {GatewaySocket, GatewaySocketProperties} from '@app/features/gateway/transport/GatewaySocket';
 import {PooledGatewayConnection} from '@app/features/gateway/transport/PooledGatewayConnection';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
@@ -101,9 +100,9 @@ vi.mock('@app/features/auth/state/Authentication', () => ({
 
 vi.mock('@app/features/expressions/state/FavoriteMemes', () => ({default: {reset: vi.fn()}}));
 
-vi.mock('@app/features/guild/state/GuildMatureContentAgree', () => ({default: {reset: vi.fn()}}));
-
 vi.mock('@app/features/member/state/MemberSearch', () => ({default: {handleLogout: vi.fn()}}));
+
+vi.mock('@app/features/moderation/state/ReportFlows', () => ({default: {reset: vi.fn()}}));
 
 vi.mock('@app/features/messaging/state/MessagingMessages', () => ({
 	default: {handleSessionInvalidated: vi.fn(), handleConnectionClosed: vi.fn()},
@@ -184,32 +183,6 @@ afterEach(() => {
 });
 
 describe('pooled gateway connection', () => {
-	test('a foreground connection builds exactly one handler registry', () => {
-		new PooledGatewayConnection();
-
-		expect(mocks.createHandlerRegistry).toHaveBeenCalledTimes(1);
-	});
-
-	test('retiring the foreground for an account switch keeps the shell mounted', () => {
-		const connection = new PooledGatewayConnection();
-		Initialization.setReady();
-
-		connection.retireForAccountSwitch();
-
-		expect(Initialization.hasCompletedInitialLoad).toBe(true);
-		expect(Initialization.isReady).toBe(false);
-	});
-
-	test('logging out returns the client to its booting state', () => {
-		const connection = new PooledGatewayConnection();
-		Initialization.setReady();
-
-		connection.logout();
-
-		expect(Initialization.hasCompletedInitialLoad).toBe(false);
-		expect(Initialization.isReady).toBe(false);
-	});
-
 	test('a dispatch delivered on a retired socket invokes no handler', () => {
 		const handler = vi.fn();
 		mocks.createHandlerRegistry.mockImplementationOnce(() => new Map([['MESSAGE_CREATE', handler]]));

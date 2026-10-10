@@ -16,10 +16,13 @@ import {APIErrorCodes} from '@fluxer/constants/src/ApiErrorCodes';
 import type {ValueOf} from '@fluxer/constants/src/ValueOf';
 import type {
 	AuthRegistrationPendingApprovalResponse,
+	DesktopHandoffReturnMethod,
 	RegisterRequest,
 	SsoCompleteResponse,
 	SsoStartRequest,
 	SsoStartResponse,
+	UsernameAvailabilityResponse,
+	UsernameSuggestionsResponse,
 } from '@fluxer/schema/src/domains/auth/AuthSchemas';
 import type {UserPartial} from '@fluxer/schema/src/domains/user/UserResponseSchemas';
 import type {AuthenticationResponseJSON, PublicKeyCredentialRequestOptionsJSON} from '@simplewebauthn/browser';
@@ -135,10 +138,11 @@ interface DesktopHandoffInitiateResponse {
 	code: string;
 	expires_at: string;
 	poll_secret?: string;
+	return_method?: DesktopHandoffReturnMethod;
 }
 
 interface DesktopHandoffStatusResponse {
-	status: 'pending' | 'completed' | 'expired';
+	status: 'pending' | 'completed' | 'denied' | 'expired';
 	token?: string;
 	user_id?: string;
 	user?: AuthResponseUser | null;
@@ -147,6 +151,7 @@ interface DesktopHandoffStatusResponse {
 interface DesktopHandoffInfoClientInfo {
 	platform?: string | null;
 	os?: string | null;
+	device?: 'mobile' | 'desktop';
 	location?: {
 		city?: string | null;
 		region?: string | null;
@@ -157,6 +162,11 @@ interface DesktopHandoffInfoClientInfo {
 export interface DesktopHandoffInfoResponse {
 	status: 'pending' | 'expired';
 	client_info?: DesktopHandoffInfoClientInfo | null;
+	return_method?: DesktopHandoffReturnMethod;
+}
+
+interface DesktopHandoffCompleteResponse {
+	return_url?: string;
 }
 
 export type LoginIdentifier = {email: string; login?: undefined} | {login: string; email?: undefined};
@@ -252,7 +262,7 @@ function tokenBody(token: string): {token: string} {
 	return {token};
 }
 
-export class MalformedIpAuthorizationChallengeError extends HttpError {
+class MalformedIpAuthorizationChallengeError extends HttpError {
 	constructor(error: HttpError) {
 		super({
 			method: error.method,
@@ -434,10 +444,6 @@ export async function register(data: RegisterRequest, target: AuthRequestTarget)
 	}
 }
 
-interface UsernameSuggestionsResponse {
-	suggestions: Array<string>;
-}
-
 export async function getUsernameSuggestions(globalName: string, target: InstanceHTTPTarget): Promise<Array<string>> {
 	try {
 		const response = await instanceRequest<UsernameSuggestionsResponse>({
@@ -454,10 +460,6 @@ export async function getUsernameSuggestions(globalName: string, target: Instanc
 		logger.error('Failed to fetch username suggestions', error);
 		throw error;
 	}
-}
-
-interface UsernameAvailabilityResponse {
-	available: boolean;
 }
 
 export async function checkUsernameAvailability(
@@ -730,19 +732,32 @@ export async function completeDesktopHandoff({
 	code,
 	token,
 	userId,
+	returnMethod,
 	target,
 }: {
 	code: string;
 	token: string;
 	userId: string;
+	returnMethod: DesktopHandoffReturnMethod;
 	target: InstanceHTTPTarget;
-}): Promise<void> {
-	await instanceRequest({
+}): Promise<string | null> {
+	const response = await instanceRequest<DesktopHandoffCompleteResponse | null>({
 		method: 'POST',
 		path: Endpoints.AUTH_HANDOFF_COMPLETE,
 		target,
-		body: {code, user_id: userId},
+		body: {code, user_id: userId, return_method: returnMethod},
 		headers: withAuthLocaleHeader({Authorization: token}),
+		auth: 'none',
+	});
+	return response.body?.return_url ?? null;
+}
+
+export async function denyDesktopHandoff({code, target}: {code: string; target: InstanceHTTPTarget}): Promise<void> {
+	await instanceRequest({
+		method: 'POST',
+		path: Endpoints.AUTH_HANDOFF_DENY(code),
+		target,
+		headers: withAuthLocaleHeader(),
 		auth: 'none',
 	});
 }

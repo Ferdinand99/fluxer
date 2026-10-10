@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type {ChannelID, MessageID, UserID} from '@app/api/BrandedTypes';
-import type {IChannelRepositoryAggregate} from '@app/api/channel/repositories/IChannelRepositoryAggregate';
+import type {ChannelRepository} from '@app/api/channel/ChannelRepository';
 import type {AuthenticatedChannel} from '@app/api/channel/services/AuthenticatedChannel';
 import {collectEmbedContentHashes} from '@app/api/channel/services/message/CrosspostEmbedObjects';
 import {
 	type CrosspostPropagation,
 	createCrosspostRateLimitError,
 	isCrosspostedMessage,
-	withPeekRetryAfter,
 } from '@app/api/channel/services/message/CrosspostPropagation';
 import type {MessageChannelAuthService} from '@app/api/channel/services/message/MessageChannelAuthService';
 import type {MessageDispatchService} from '@app/api/channel/services/message/MessageDispatchService';
@@ -37,7 +36,7 @@ import type {GuildResponse} from '@fluxer/schema/src/domains/guild/GuildResponse
 import type {IRateLimitService} from '@pkgs/rate_limit/src/IRateLimitService';
 
 interface MessageCrosspostServiceDeps {
-	channelRepository: IChannelRepositoryAggregate;
+	channelRepository: ChannelRepository;
 	channelAuthService: MessageChannelAuthService;
 	dispatchService: MessageDispatchService;
 	rateLimitService: IRateLimitService;
@@ -189,11 +188,8 @@ export class MessageCrosspostService {
 	private async assertBudgetAvailable(channelId: ChannelID): Promise<void> {
 		const config = this.channelBudgetConfig(channelId);
 		const peek = await this.deps.rateLimitService.peekLimit(config);
-		if (peek.remaining < 1) {
-			throw createCrosspostRateLimitError(
-				APIErrorCodes.MESSAGE_CROSSPOST_RATE_LIMITED,
-				withPeekRetryAfter(peek, config),
-			);
+		if (!peek.allowed) {
+			throw createCrosspostRateLimitError(APIErrorCodes.MESSAGE_CROSSPOST_RATE_LIMITED, peek);
 		}
 	}
 

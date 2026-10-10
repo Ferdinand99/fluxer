@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {Routes} from '@app/app/Routes';
-import {PRODUCT_NAME} from '@app/features/app/config/I18nDisplayConstants';
+import {getActiveInstanceProductName} from '@app/features/app/state/ActiveInstanceProductName';
 import RuntimeConfig from '@app/features/app/state/RuntimeConfig';
 import styles from '@app/features/channel/components/InviteEmbed.module.css';
 import {
@@ -17,6 +17,7 @@ import {GuildIcon} from '@app/features/guild/components/popouts/GuildIcon';
 import GuildCount from '@app/features/guild/state/GuildCount';
 import Guilds from '@app/features/guild/state/Guilds';
 import {JOIN_COMMUNITY_DESCRIPTOR} from '@app/features/i18n/utils/CommonMessageDescriptors';
+import {formatNumber} from '@app/features/i18n/utils/IntlCache';
 import {isKeyboardActivationKey} from '@app/features/input/utils/KeyboardUtils';
 import * as InviteCommands from '@app/features/invite/commands/InviteCommands';
 import Invites from '@app/features/invite/state/Invites';
@@ -56,7 +57,6 @@ import {getCurrentLocale} from '@app/features/user/utils/LocaleUtils';
 import {msg} from '@lingui/core/macro';
 import {Plural, Trans, useLingui} from '@lingui/react/macro';
 import {QuestionIcon} from '@phosphor-icons/react';
-import {formatNumber} from '@pkgs/number_utils/src/NumberFormatting';
 import {observer} from 'mobx-react-lite';
 import type React from 'react';
 import {useEffect, useMemo, useRef, useState} from 'react';
@@ -364,7 +364,9 @@ const InviteEmbedInner = observer(function InviteEmbedInner({
 						{actionType === GuildInvitePrimaryAction.InvitesDisabled && (
 							<p className={styles.statText} data-flx="channel.invite-embed.stat-text--4">
 								{guildActionState.isRaidDetected
-									? i18n._(DETECTED_A_POTENTIAL_RAID_SO_NEW_USERS_CAN_DESCRIPTOR, {productName: PRODUCT_NAME})
+									? i18n._(DETECTED_A_POTENTIAL_RAID_SO_NEW_USERS_CAN_DESCRIPTOR, {
+											productName: getActiveInstanceProductName(),
+										})
 									: i18n._(INVITES_ARE_CURRENTLY_PAUSED_FOR_THIS_COMMUNITY_DESCRIPTOR)}
 							</p>
 						)}
@@ -389,7 +391,6 @@ const InviteEmbedInner = observer(function InviteEmbedInner({
 	const handleContextMenu = (event: React.MouseEvent) => {
 		const channelId = invite && (isGuildInvite(invite) || isGroupDmInvite(invite)) ? invite.channel.id : null;
 		const guildForMenu = guild ? {id: guild.id, name: guild.name} : null;
-		const inviteCodeForMenu = guildForMenu && invite ? invite.code : null;
 		if (!message && !guildForMenu && !channelId) return;
 		event.preventDefault();
 		event.stopPropagation();
@@ -400,7 +401,6 @@ const InviteEmbedInner = observer(function InviteEmbedInner({
 				linkUrl={`${RuntimeConfig.inviteEndpoint}/${code}`}
 				guild={guildForMenu}
 				channelId={channelId}
-				inviteCode={inviteCodeForMenu}
 				onDelete={onDelete}
 				onClose={props.onClose}
 				data-flx="channel.invite-embed.handle-context-menu.invite-embed-context-menu"

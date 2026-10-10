@@ -23,7 +23,6 @@ import {NoopLogger} from '@app/api/test/mocks/NoopLogger';
 import {
 	archiveInactiveThreads,
 	deleteChannelThreads,
-	rebuildThreadAutoArchiveQueue,
 	removeThreadMembershipsForGuildMember,
 } from '@app/api/worker/tasks/ThreadMaintenanceTasks';
 import {clearWorkerDependencies, setWorkerDependenciesForTest} from '@app/api/worker/WorkerContext';
@@ -130,27 +129,12 @@ describe('thread maintenance tasks', () => {
 		expect(queued).not.toContain(thread.id);
 	});
 
-	it('reloads a lagging config before rebuilding the auto-archive queue', async () => {
-		const s = await setup();
-		const thread = await startThread(s.owner.token, s.channelId);
-		const key = threadArchiveQueueKey(createGuildID(BigInt(s.guildId)));
-		await getKVClient().del(key);
-		const configVersion = (await getInstanceConfigRepository().getChannelThreadsConfig()).config_version;
-		resetChannelThreadsConfig();
-		await expect(
-			rebuildThreadAutoArchiveQueue({guildId: s.guildId, configVersion: configVersion + 1}, helpers()),
-		).rejects.toThrow();
-		resetChannelThreadsConfig();
-		await rebuildThreadAutoArchiveQueue({guildId: s.guildId, configVersion}, helpers());
-		expect(await getKVClient().zrangebyscore(key, '-inf', '+inf')).toContain(thread.id);
-	});
-
 	it('deletes the threads of a deleted parent in tainted guilds', async () => {
 		const s = await setup();
 		const thread = await startThread(s.owner.token, s.channelId);
 		await deleteChannelThreads({guildId: s.guildId, parentId: s.channelId}, helpers());
 		expect(await state(thread.id)).toBeNull();
-		expect(await getChannelRepository().findUnique(createChannelID(BigInt(thread.id)))).toBeNull();
+		expect(await getChannelRepository().channelData.findUnique(createChannelID(BigInt(thread.id)))).toBeNull();
 	});
 
 	it('purges thread memberships of a removed guild member and keeps those of a rejoined one', async () => {

@@ -7,8 +7,8 @@ use crate::{
             AppBrandingConfigUpdateRequest, AppLegalConfigUpdateRequest,
             AppPublicConfigUpdateRequest, AppRegistrationConfigUpdateRequest,
             AppSetupConfigUpdateRequest, CAPTCHA_COST_RANGE, CAPTCHA_MAX_COUNTER_RANGE,
-            CaptchaConfigUpdateRequest, ChannelThreadsConfigUpdateRequest,
-            CreateRegistrationUrlRequest, DomainMigrationConfigUpdateRequest,
+            CaptchaConfigUpdateRequest, CreateRegistrationUrlRequest,
+            DomainMigrationConfigUpdateRequest, EXPERIMENT_MAX_ROLLOUT_COUNTRY_CODES,
             EXPERIMENT_MAX_TARGETED_USERS, ExperimentDeliveryConfigUpdateRequest,
             GatewayRolloutConfigUpdateRequest, GatewayRolloutMode,
             InstanceAttachmentDecayUpdateRequest, InstanceBlueskyIntegrationUpdateRequest,
@@ -18,9 +18,9 @@ use crate::{
             InstanceIntegrationsUpdateRequest, InstanceMediaUpdateRequest,
             InstancePolicyUpdateRequest, InstanceRegistrationConfigUpdateRequest,
             InstanceServicesUpdateRequest, InstanceYoutubeIntegrationUpdateRequest,
-            LimitConfigUpdateRequest, LimitRule, LimitRuleFilters,
-            PlutoniumPageConfigUpdateRequest, PremiumMode, PushRelayConfigUpdateRequest,
-            RegistrationMode, SsoConfigUpdateRequest, VoiceE2eeScope,
+            LimitConfigUpdateRequest, LimitRule, LimitRuleFilters, PremiumMode,
+            PushRelayConfigUpdateRequest, RegistrationMode, SsoConfigUpdateRequest,
+            VOICE_P2P_MAX_PARTICIPANTS_RANGE, VoiceE2eeScope, VoiceP2pConfigUpdateRequest,
         },
     },
     config::AdminConfig,
@@ -221,7 +221,7 @@ pub async fn instance_config_post(
             Ok(update) => instance_config_result(client.update_instance_config(&update).await),
             Err(message) => FlashData::error(message),
         },
-        "update_plutonium_page" => match build_plutonium_page_update(&form) {
+        "update_voice_p2p" => match build_voice_p2p_update(&form) {
             Ok(update) => instance_config_result(client.update_instance_config(&update).await),
             Err(message) => FlashData::error(message),
         },
@@ -229,11 +229,6 @@ pub async fn instance_config_post(
             Ok(update) => instance_config_result(client.update_instance_config(&update).await),
             Err(message) => FlashData::error(message),
         },
-        "update_channel_threads" => instance_config_result(
-            client
-                .update_instance_config(&build_channel_threads_update(&form))
-                .await,
-        ),
         "update_experiment_delivery" => match build_experiment_delivery_update(&form) {
             Ok(update) => instance_config_result(client.update_instance_config(&update).await),
             Err(message) => FlashData::error(message),
@@ -567,6 +562,32 @@ fn parse_experiment_user_ids(value: &str, label: &str) -> Result<Vec<String>, St
     Ok(ids)
 }
 
+fn parse_experiment_country_codes(value: &str) -> Result<Vec<String>, String> {
+    let mut codes: Vec<String> = Vec::new();
+    let candidates = value
+        .split(|character: char| character == ',' || character.is_whitespace())
+        .filter(|candidate| !candidate.is_empty());
+    for (index, candidate) in candidates.enumerate() {
+        if candidate.len() != 2 || !candidate.bytes().all(|byte| byte.is_ascii_alphabetic()) {
+            return Err(format!(
+                "Rollout countries entry {} must be a two-letter country code",
+                index + 1
+            ));
+        }
+        let code = candidate.to_ascii_uppercase();
+        if codes.contains(&code) {
+            continue;
+        }
+        if codes.len() == EXPERIMENT_MAX_ROLLOUT_COUNTRY_CODES {
+            return Err(format!(
+                "Rollout countries must contain at most {EXPERIMENT_MAX_ROLLOUT_COUNTRY_CODES} unique codes"
+            ));
+        }
+        codes.push(code);
+    }
+    Ok(codes)
+}
+
 fn build_push_relay_update(form: &MultiValueForm) -> InstanceConfigUpdateRequest {
     InstanceConfigUpdateRequest {
         push_relay: Some(PushRelayConfigUpdateRequest {
@@ -589,6 +610,10 @@ fn build_domain_migration_update(
                 0,
                 EXPERIMENT_ROLLOUT_BASIS_POINTS_MAX,
             )?,
+            rollout_country_codes: Some(parse_experiment_country_codes(
+                form.first("domain_migration_rollout_country_codes")
+                    .unwrap_or_default(),
+            )?),
             rollout_salt: parse_experiment_rollout_salt(form, "domain_migration_rollout_salt")?,
             included_user_ids: Some(parse_experiment_user_ids(
                 form.first("domain_migration_included_user_ids")
@@ -619,36 +644,45 @@ fn build_domain_migration_update(
     })
 }
 
-fn build_plutonium_page_update(
-    form: &MultiValueForm,
-) -> Result<InstanceConfigUpdateRequest, String> {
+fn build_voice_p2p_update(form: &MultiValueForm) -> Result<InstanceConfigUpdateRequest, String> {
     Ok(InstanceConfigUpdateRequest {
-        plutonium_page: Some(PlutoniumPageConfigUpdateRequest {
-            enabled: Some(form.bool_value("plutonium_page_enabled")),
+        voice_p2p: Some(VoiceP2pConfigUpdateRequest {
+            enabled: Some(form.bool_value("voice_p2p_enabled")),
             rollout_basis_points: parse_form_number(
                 form,
-                "plutonium_page_rollout_basis_points",
+                "voice_p2p_rollout_basis_points",
                 "Rollout basis points",
                 0,
                 EXPERIMENT_ROLLOUT_BASIS_POINTS_MAX,
             )?,
-            rollout_salt: parse_experiment_rollout_salt(form, "plutonium_page_rollout_salt")?,
+            rollout_country_codes: Some(parse_experiment_country_codes(
+                form.first("voice_p2p_rollout_country_codes")
+                    .unwrap_or_default(),
+            )?),
+            rollout_salt: parse_experiment_rollout_salt(form, "voice_p2p_rollout_salt")?,
             included_user_ids: Some(parse_experiment_user_ids(
-                form.first("plutonium_page_included_user_ids")
+                form.first("voice_p2p_included_user_ids")
                     .unwrap_or_default(),
                 "Included user IDs",
             )?),
             included_guild_ids: Some(parse_experiment_user_ids(
-                form.first("plutonium_page_included_guild_ids")
+                form.first("voice_p2p_included_guild_ids")
                     .unwrap_or_default(),
                 "Included guild IDs",
             )?),
-            include_premium_users: Some(form.bool_value("plutonium_page_include_premium_users")),
+            include_premium_users: Some(form.bool_value("voice_p2p_include_premium_users")),
             excluded_user_ids: Some(parse_experiment_user_ids(
-                form.first("plutonium_page_excluded_user_ids")
+                form.first("voice_p2p_excluded_user_ids")
                     .unwrap_or_default(),
                 "Excluded user IDs",
             )?),
+            max_participants: parse_form_number(
+                form,
+                "voice_p2p_max_participants",
+                "Maximum participants",
+                *VOICE_P2P_MAX_PARTICIPANTS_RANGE.start(),
+                *VOICE_P2P_MAX_PARTICIPANTS_RANGE.end(),
+            )?,
         }),
         ..Default::default()
     })
@@ -675,28 +709,6 @@ fn build_captcha_update(form: &MultiValueForm) -> Result<InstanceConfigUpdateReq
         }),
         ..Default::default()
     })
-}
-
-fn build_channel_threads_update(form: &MultiValueForm) -> InstanceConfigUpdateRequest {
-    let channel_threads = if form.bool_value("channel_threads_everyone") {
-        ChannelThreadsConfigUpdateRequest {
-            enabled: Some(true),
-            guild_basis_points: Some(EXPERIMENT_ROLLOUT_BASIS_POINTS_MAX),
-            user_basis_points: Some(EXPERIMENT_ROLLOUT_BASIS_POINTS_MAX),
-            disabled_guild_ids: Some(Vec::new()),
-            excluded_user_ids: Some(Vec::new()),
-            ..Default::default()
-        }
-    } else {
-        ChannelThreadsConfigUpdateRequest {
-            enabled: Some(false),
-            ..Default::default()
-        }
-    };
-    InstanceConfigUpdateRequest {
-        channel_threads: Some(channel_threads),
-        ..Default::default()
-    }
 }
 
 fn build_experiment_delivery_update(
@@ -776,6 +788,7 @@ fn build_app_legal_update(form: &MultiValueForm) -> InstanceConfigUpdateRequest 
             legal: Some(AppLegalConfigUpdateRequest {
                 terms_url: optional("app_terms_url"),
                 privacy_url: optional("app_privacy_url"),
+                guidelines_url: optional("app_guidelines_url"),
             }),
             registration: None,
         }),
@@ -1226,6 +1239,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn build_app_legal_update_sends_the_guidelines_url_and_clears_blank_fields() {
+        let form = MultiValueForm::parse(
+            b"app_terms_url=+https%3A%2F%2Fexample.com%2Fterms+&app_privacy_url=&app_guidelines_url=https%3A%2F%2Fexample.com%2Frules",
+        );
+        let request = build_app_legal_update(&form);
+        let legal = request
+            .app_public
+            .expect("app public update")
+            .legal
+            .expect("legal update");
+        assert_eq!(
+            legal.terms_url,
+            Some(Some("https://example.com/terms".to_owned()))
+        );
+        assert_eq!(legal.privacy_url, Some(None));
+        assert_eq!(
+            legal.guidelines_url,
+            Some(Some("https://example.com/rules".to_owned()))
+        );
+        let body = serde_json::to_value(&legal).expect("serialize legal update");
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "terms_url": "https://example.com/terms",
+                "privacy_url": null,
+                "guidelines_url": "https://example.com/rules"
+            })
+        );
+
+        let cleared = build_app_legal_update(&MultiValueForm::parse(
+            b"app_terms_url=&app_privacy_url=&app_guidelines_url=+",
+        ));
+        let body = serde_json::to_value(cleared.app_public.expect("app public").legal)
+            .expect("serialize cleared legal update");
+        assert_eq!(
+            body,
+            serde_json::json!({"terms_url": null, "privacy_url": null, "guidelines_url": null})
+        );
+    }
+
+    #[test]
     fn build_integrations_update_leaves_email_alone_when_its_fields_are_hidden() {
         let hidden = build_integrations_update(&MultiValueForm::parse(
             b"integration_klipy_api_key=&integration_youtube_api_key=",
@@ -1366,9 +1420,61 @@ mod tests {
     }
 
     #[test]
+    fn parse_experiment_country_codes_splits_uppercases_and_dedupes() {
+        assert_eq!(
+            parse_experiment_country_codes("  se ,NO\nbr\r\n fi\tSE ,, no ").expect("valid codes"),
+            vec![
+                "SE".to_owned(),
+                "NO".to_owned(),
+                "BR".to_owned(),
+                "FI".to_owned()
+            ]
+        );
+        assert_eq!(
+            parse_experiment_country_codes(" \n ").expect("valid codes"),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn parse_experiment_country_codes_rejects_malformed_codes() {
+        for value in ["S", "SWE", "S1", "5E", "<>", "ÅL"] {
+            assert_eq!(
+                parse_experiment_country_codes(&format!("SE,{value}")).expect_err("invalid code"),
+                "Rollout countries entry 2 must be a two-letter country code",
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_experiment_country_codes_rejects_exceeding_the_cap() {
+        let codes = (b'A'..=b'Z')
+            .flat_map(|first| {
+                (b'A'..=b'Z').map(move |second| format!("{}{}", first as char, second as char))
+            })
+            .collect::<Vec<_>>();
+        let at_cap = codes[..EXPERIMENT_MAX_ROLLOUT_COUNTRY_CODES].join(" ");
+        assert_eq!(
+            parse_experiment_country_codes(&format!("{at_cap} aa"))
+                .expect("valid codes at cap")
+                .len(),
+            EXPERIMENT_MAX_ROLLOUT_COUNTRY_CODES
+        );
+        assert_eq!(
+            parse_experiment_country_codes(&format!(
+                "{at_cap} {}",
+                codes[EXPERIMENT_MAX_ROLLOUT_COUNTRY_CODES]
+            ))
+            .expect_err("too many codes"),
+            "Rollout countries must contain at most 250 unique codes"
+        );
+    }
+
+    #[test]
     fn build_domain_migration_update_reads_the_rollout_fields() {
         let form = MultiValueForm::parse(
-            b"domain_migration_enabled=true&domain_migration_rollout_basis_points=%20250%20&domain_migration_rollout_salt=%20domain-migration-v2%20&domain_migration_included_user_ids=1500000000000000001%0A1500000000000000002&domain_migration_excluded_user_ids=1500000000000000003%2C%201500000000000000004&domain_migration_anonymous_rollout_basis_points=%20100%20&domain_migration_standalone_forwarding=true&domain_migration_included_guild_ids=1500000000000000005%0A1500000000000000006%2C1500000000000000005&domain_migration_include_premium_users=true",
+            b"domain_migration_enabled=true&domain_migration_rollout_basis_points=%20250%20&domain_migration_rollout_salt=%20domain-migration-v2%20&domain_migration_included_user_ids=1500000000000000001%0A1500000000000000002&domain_migration_excluded_user_ids=1500000000000000003%2C%201500000000000000004&domain_migration_anonymous_rollout_basis_points=%20100%20&domain_migration_standalone_forwarding=true&domain_migration_included_guild_ids=1500000000000000005%0A1500000000000000006%2C1500000000000000005&domain_migration_include_premium_users=true&domain_migration_rollout_country_codes=se%2C%20NO%0Ase",
         );
         let update = build_domain_migration_update(&form)
             .expect("valid form")
@@ -1395,6 +1501,10 @@ mod tests {
         assert_eq!(update.standalone_forwarding, Some(true));
         assert_eq!(update.include_premium_users, Some(true));
         assert_eq!(
+            update.rollout_country_codes,
+            Some(vec!["SE".to_owned(), "NO".to_owned()])
+        );
+        assert_eq!(
             update.included_guild_ids,
             Some(vec![
                 "1500000000000000005".to_owned(),
@@ -1411,6 +1521,7 @@ mod tests {
             serde_json::to_value(request).expect("serializable update"),
             serde_json::json!({"domain_migration": {
                 "enabled": false,
+                "rollout_country_codes": [],
                 "included_user_ids": [],
                 "included_guild_ids": [],
                 "include_premium_users": false,
@@ -1455,6 +1566,10 @@ mod tests {
                 "domain_migration_excluded_user_ids=123%2Cinvalid",
                 "Excluded user IDs entry 2 must contain 1 to 20 decimal digits",
             ),
+            (
+                "domain_migration_rollout_country_codes=SE%2CSWE",
+                "Rollout countries entry 2 must be a two-letter country code",
+            ),
         ] {
             let form = MultiValueForm::parse(form.as_bytes());
             assert_eq!(
@@ -1462,30 +1577,6 @@ mod tests {
                 message
             );
         }
-    }
-
-    #[test]
-    fn build_channel_threads_update_turns_threads_on_for_everyone() {
-        let form = MultiValueForm::parse(b"_csrf=token&channel_threads_everyone=true");
-        assert_eq!(
-            serde_json::to_value(build_channel_threads_update(&form)).expect("serializable update"),
-            serde_json::json!({"channel_threads": {
-                "enabled": true,
-                "guild_basis_points": 10000,
-                "user_basis_points": 10000,
-                "disabled_guild_ids": [],
-                "excluded_user_ids": [],
-            }})
-        );
-    }
-
-    #[test]
-    fn build_channel_threads_update_only_turns_threads_off_when_unchecked() {
-        let form = MultiValueForm::parse(b"_csrf=token");
-        assert_eq!(
-            serde_json::to_value(build_channel_threads_update(&form)).expect("serializable update"),
-            serde_json::json!({"channel_threads": {"enabled": false}})
-        );
     }
 
     #[test]
@@ -1569,18 +1660,23 @@ mod tests {
     }
 
     #[test]
-    fn build_plutonium_page_update_reads_the_rollout_fields() {
+    fn build_voice_p2p_update_reads_the_rollout_fields() {
         let form = MultiValueForm::parse(
-            b"plutonium_page_enabled=true&plutonium_page_rollout_basis_points=%20500%20&plutonium_page_rollout_salt=%20plutonium-page-v2%20&plutonium_page_included_user_ids=1500000000000000001&plutonium_page_excluded_user_ids=1500000000000000002&plutonium_page_included_guild_ids=1500000000000000005%0A1500000000000000006%2C1500000000000000005&plutonium_page_include_premium_users=true",
+            b"voice_p2p_enabled=true&voice_p2p_rollout_basis_points=%20500%20&voice_p2p_rollout_salt=%20voice-p2p-v2%20&voice_p2p_included_user_ids=1500000000000000001&voice_p2p_excluded_user_ids=1500000000000000002&voice_p2p_included_guild_ids=1500000000000000005%0A1500000000000000006%2C1500000000000000005&voice_p2p_include_premium_users=true&voice_p2p_rollout_country_codes=se%2C%20NO%0Ase&voice_p2p_max_participants=%203%20",
         );
-        let update = build_plutonium_page_update(&form)
+        let update = build_voice_p2p_update(&form)
             .expect("valid form")
-            .plutonium_page
-            .expect("plutonium page update");
+            .voice_p2p
+            .expect("voice p2p update");
         assert_eq!(update.enabled, Some(true));
         assert_eq!(update.rollout_basis_points, Some(500));
-        assert_eq!(update.rollout_salt, Some("plutonium-page-v2".to_owned()));
+        assert_eq!(update.rollout_salt, Some("voice-p2p-v2".to_owned()));
         assert_eq!(update.include_premium_users, Some(true));
+        assert_eq!(update.max_participants, Some(3));
+        assert_eq!(
+            update.rollout_country_codes,
+            Some(vec!["SE".to_owned(), "NO".to_owned()])
+        );
         assert_eq!(
             update.included_guild_ids,
             Some(vec![
@@ -1599,13 +1695,14 @@ mod tests {
     }
 
     #[test]
-    fn build_plutonium_page_update_leaves_the_feature_inert_when_nothing_is_submitted() {
+    fn build_voice_p2p_update_leaves_the_feature_inert_when_nothing_is_submitted() {
         let form = MultiValueForm::parse(b"_csrf=token");
-        let request = build_plutonium_page_update(&form).expect("valid form");
+        let request = build_voice_p2p_update(&form).expect("valid form");
         assert_eq!(
             serde_json::to_value(request).expect("serializable update"),
-            serde_json::json!({"plutonium_page": {
+            serde_json::json!({"voice_p2p": {
                 "enabled": false,
+                "rollout_country_codes": [],
                 "included_user_ids": [],
                 "included_guild_ids": [],
                 "include_premium_users": false,
@@ -1615,20 +1712,32 @@ mod tests {
     }
 
     #[test]
-    fn build_plutonium_page_update_rejects_invalid_rollout_fields() {
+    fn build_voice_p2p_update_rejects_invalid_rollout_fields() {
         for (form, message) in [
             (
-                "plutonium_page_rollout_basis_points=10001",
+                "voice_p2p_rollout_basis_points=10001",
                 "Rollout basis points must be a whole number between 0 and 10000",
             ),
             (
-                "plutonium_page_included_guild_ids=1500000000000000005%0Anot-a-guild",
+                "voice_p2p_included_guild_ids=1500000000000000005%0Anot-a-guild",
                 "Included guild IDs entry 2 must contain 1 to 20 decimal digits",
+            ),
+            (
+                "voice_p2p_rollout_country_codes=SE%2CSWE",
+                "Rollout countries entry 2 must be a two-letter country code",
+            ),
+            (
+                "voice_p2p_max_participants=5",
+                "Maximum participants must be a whole number between 2 and 4",
+            ),
+            (
+                "voice_p2p_max_participants=1",
+                "Maximum participants must be a whole number between 2 and 4",
             ),
         ] {
             let form = MultiValueForm::parse(form.as_bytes());
             assert_eq!(
-                build_plutonium_page_update(&form).expect_err("invalid field"),
+                build_voice_p2p_update(&form).expect_err("invalid field"),
                 message
             );
         }

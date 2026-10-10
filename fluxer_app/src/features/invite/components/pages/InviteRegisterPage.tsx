@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import {Routes} from '@app/app/Routes';
-import {PRODUCT_NAME} from '@app/features/app/config/I18nDisplayConstants';
+import {getActiveInstanceProductName} from '@app/features/app/state/ActiveInstanceProductName';
 import type {RuntimeConfigSnapshot} from '@app/features/app/state/InstanceSnapshotStore';
 import {AuthBottomLink} from '@app/features/auth/flow/AuthBottomLink';
 import {AuthErrorState} from '@app/features/auth/flow/AuthErrorState';
 import {AuthLoadingState} from '@app/features/auth/flow/AuthLoadingState';
-import {AuthMinimalRegisterFormCore} from '@app/features/auth/flow/AuthMinimalRegisterFormCore';
 import sharedStyles from '@app/features/auth/flow/AuthPageStyles.module.css';
+import {AuthRegisterFormCore} from '@app/features/auth/flow/AuthRegisterFormCore';
 import {AuthRouterLink} from '@app/features/auth/flow/AuthRouterLink';
 import {AuthRuntimeTargetGate} from '@app/features/auth/flow/AuthRuntimeTargetGate';
 import {AuthRuntimeTargetResetAction} from '@app/features/auth/flow/AuthRuntimeTargetResetAction';
@@ -136,7 +136,7 @@ const InviteRegisterPageContent = observer(function InviteRegisterPageContent({
 				<div className={sharedStyles.disabledContainer} data-flx="invite.invite-register-page.div--2">
 					<p className={sharedStyles.disabledText} data-flx="invite.invite-register-page.p">
 						{isRaidDetected
-							? i18n._(RAID_INVITES_PAUSED_DESCRIPTOR, {productName: PRODUCT_NAME})
+							? i18n._(RAID_INVITES_PAUSED_DESCRIPTOR, {productName: getActiveInstanceProductName()})
 							: i18n._(INVITES_PAUSED_DESCRIPTOR)}
 					</p>
 					<p className={sharedStyles.disabledSubtext} data-flx="invite.invite-register-page.p--2">
@@ -199,7 +199,8 @@ const InviteRegisterPageContent = observer(function InviteRegisterPageContent({
 			/>
 			<InviteHeader invite={invite} data-flx="invite.invite-register-page.invite-header" />
 			<div className={sharedStyles.container} data-flx="invite.invite-register-page.div--4">
-				<AuthMinimalRegisterFormCore
+				<AuthRegisterFormCore
+					fields={{showUsername: false}}
 					submitLabel={i18n._(CREATE_ACCOUNT_DESCRIPTOR)}
 					redirectPath="/"
 					inviteCode={code}

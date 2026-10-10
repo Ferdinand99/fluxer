@@ -144,6 +144,10 @@ const ChannelUpdateCommon = ChannelCommonBase.extend({
 		.describe(
 			`Voice region ID for the voice channel (${RTC_REGION_ID_MIN_LENGTH}-${RTC_REGION_ID_MAX_LENGTH} characters)`,
 		),
+	rtc_p2p: z
+		.boolean()
+		.optional()
+		.describe('Whether calls in the voice channel connect participants directly instead of through a voice server'),
 });
 const ChannelCreateTextRequest = ChannelCreateCommon.extend({
 	type: createNamedLiteral(ChannelTypes.GUILD_TEXT, 'GUILD_TEXT', 'Channel type (text channel)'),
@@ -258,6 +262,7 @@ const ChannelUpdateGroupDmRequest = z.object({
 		.describe('Base64-encoded icon image for the group DM'),
 	owner_id: SnowflakeType.nullish().describe('ID of the new owner of the group DM'),
 	nicks: ChannelNicknameOverrides.nullish().describe('Custom nicknames for users in this group DM'),
+	nsfw: z.boolean().nullish().describe('Whether the group DM is marked for mature content (owner only)'),
 });
 
 const ChannelUpdateThreadFields = {
