@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import type {AdminAuditLog} from '@app/api/admin/IAdminRepository';
+import type {AdminAuditLog} from '@app/api/admin/AdminRepository';
 import type {ChannelID, GuildID, MessageID, ReportID, UserID} from '@app/api/BrandedTypes';
 import type {Guild} from '@app/api/models/Guild';
 import type {GuildMember} from '@app/api/models/GuildMember';
 import type {Message} from '@app/api/models/Message';
 import type {User} from '@app/api/models/User';
-import type {IARSubmission} from '@app/api/report/IReportRepository';
+import type {IARSubmission} from '@app/api/report/ReportModels';
 import {convertToSearchableAuditLog} from '@app/api/search/auditlog/AuditLogSearchSerializer';
 import type {GuildDiscoveryContext} from '@app/api/search/guild/GuildSearchSerializer';
 import {convertToSearchableGuild} from '@app/api/search/guild/GuildSearchSerializer';
@@ -305,10 +305,6 @@ class InMemoryMessageSearchService
 		await this.updateDocument(convertToSearchableMessage(message, authorIsBot));
 	}
 
-	async deleteMessage(messageId: MessageID): Promise<void> {
-		await this.deleteDocument(messageId.toString());
-	}
-
 	async deleteMessages(messageIds: Array<MessageID>): Promise<void> {
 		await this.deleteDocuments(messageIds.map((id) => id.toString()));
 	}
@@ -319,11 +315,6 @@ class InMemoryMessageSearchService
 
 	async deleteChannelMessages(channelId: ChannelID): Promise<void> {
 		const result = await this.search('', {channelId: channelId.toString()}, {limit: Number.MAX_SAFE_INTEGER});
-		await this.deleteDocuments(result.hits.map((hit) => hit.id));
-	}
-
-	async deleteGuildMessages(guildId: GuildID): Promise<void> {
-		const result = await this.search('', {guildId: guildId.toString()}, {limit: Number.MAX_SAFE_INTEGER});
 		await this.deleteDocuments(result.hits.map((hit) => hit.id));
 	}
 
@@ -404,14 +395,6 @@ class InMemoryUserSearchService
 		await this.updateDocument(convertToSearchableUser(user));
 	}
 
-	async deleteUser(userId: UserID): Promise<void> {
-		await this.deleteDocument(userId.toString());
-	}
-
-	async deleteUsers(userIds: Array<UserID>): Promise<void> {
-		await this.deleteDocuments(userIds.map((id) => id.toString()));
-	}
-
 	searchUsers(query: string, filters: UserSearchFilters, options?: {limit?: number; offset?: number}) {
 		return this.search(query, filters, options);
 	}
@@ -476,10 +459,6 @@ class InMemoryGuildSearchService
 		await this.deleteDocument(guildId.toString());
 	}
 
-	async deleteGuilds(guildIds: Array<GuildID>): Promise<void> {
-		await this.deleteDocuments(guildIds.map((id) => id.toString()));
-	}
-
 	searchGuilds(query: string, filters: GuildSearchFilters, options?: SearchOptions) {
 		return this.search(query, filters, options);
 	}
@@ -490,9 +469,12 @@ function matchesReportFilters(doc: SearchableReport, filters: ReportSearchFilter
 	if (filters.status !== undefined && doc.status !== filters.status) return false;
 	if (filters.reportType !== undefined && doc.reportType !== filters.reportType) return false;
 	if (filters.category !== undefined && doc.category !== filters.category) return false;
+	if (filters.reason !== undefined && doc.reason !== filters.reason) return false;
 	if (filters.reportedUserId !== undefined && doc.reportedUserId !== filters.reportedUserId) return false;
+	if (filters.reportedWebhookId !== undefined && doc.reportedWebhookId !== filters.reportedWebhookId) return false;
 	if (filters.reportedGuildId !== undefined && doc.reportedGuildId !== filters.reportedGuildId) return false;
 	if (filters.reportedMessageId !== undefined && doc.reportedMessageId !== filters.reportedMessageId) return false;
+	if (filters.reportedChannelId !== undefined && doc.reportedChannelId !== filters.reportedChannelId) return false;
 	if (filters.guildContextId !== undefined && doc.guildContextId !== filters.guildContextId) return false;
 	if (filters.resolvedByAdminId !== undefined && doc.resolvedByAdminId !== filters.resolvedByAdminId) return false;
 	if (filters.isResolved !== undefined && (doc.resolvedAt !== null) !== filters.isResolved) return false;
@@ -508,6 +490,7 @@ function collectReportText(doc: SearchableReport): Array<string | null> {
 		doc.reportedChannelName,
 		doc.publicComment,
 		doc.reportedUserId,
+		doc.reportedWebhookId,
 		doc.reportedGuildId,
 		doc.reportedMessageId,
 	];
@@ -541,36 +524,12 @@ class InMemoryReportSearchService
 		await this.deleteDocument(reportId.toString());
 	}
 
-	async deleteReports(reportIds: Array<ReportID>): Promise<void> {
-		await this.deleteDocuments(reportIds.map((id) => id.toString()));
-	}
-
 	searchReports(query: string, filters: ReportSearchFilters, options?: {limit?: number; offset?: number}) {
 		return this.search(query, filters, options);
 	}
 
-	listReportsByReporter(reporterId: UserID, limit?: number, offset?: number) {
-		return this.searchReports('', {reporterId: reporterId.toString()}, {limit, offset});
-	}
-
 	listReportsByStatus(status: number, limit?: number, offset?: number) {
 		return this.searchReports('', {status}, {limit, offset});
-	}
-
-	listReportsByType(reportType: number, limit?: number, offset?: number) {
-		return this.searchReports('', {reportType}, {limit, offset});
-	}
-
-	listReportsByReportedUser(reportedUserId: UserID, limit?: number, offset?: number) {
-		return this.searchReports('', {reportedUserId: reportedUserId.toString()}, {limit, offset});
-	}
-
-	listReportsByReportedGuild(reportedGuildId: GuildID, limit?: number, offset?: number) {
-		return this.searchReports('', {reportedGuildId: reportedGuildId.toString()}, {limit, offset});
-	}
-
-	listReportsByReportedMessage(reportedMessageId: MessageID, limit?: number, offset?: number) {
-		return this.searchReports('', {reportedMessageId: reportedMessageId.toString()}, {limit, offset});
 	}
 }
 
@@ -606,18 +565,6 @@ class InMemoryAuditLogSearchService
 
 	async indexAuditLogs(logs: Array<AdminAuditLog>): Promise<void> {
 		await this.indexDocuments(logs.map(convertToSearchableAuditLog));
-	}
-
-	async updateAuditLog(log: AdminAuditLog): Promise<void> {
-		await this.updateDocument(convertToSearchableAuditLog(log));
-	}
-
-	async deleteAuditLog(logId: bigint): Promise<void> {
-		await this.deleteDocument(logId.toString());
-	}
-
-	async deleteAuditLogs(logIds: Array<bigint>): Promise<void> {
-		await this.deleteDocuments(logIds.map((id) => id.toString()));
 	}
 
 	searchAuditLogs(query: string, filters: AuditLogSearchFilters, options?: {limit?: number; offset?: number}) {

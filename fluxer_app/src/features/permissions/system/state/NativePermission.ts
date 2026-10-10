@@ -10,7 +10,6 @@ import {makeAutoObservable, runInAction} from 'mobx';
 const logger = new Logger('NativePermission');
 
 class NativePermission {
-	private _initialized = false;
 	private _isDesktop = false;
 	private _platform: NativePlatform = 'unknown';
 	private _waylandSession = false;
@@ -41,12 +40,7 @@ class NativePermission {
 			this._isDesktop = desktop;
 			this._platform = platform;
 			this._waylandSession = waylandSession;
-			this._initialized = true;
 		});
-	}
-
-	get initialized(): boolean {
-		return this._initialized;
 	}
 
 	get isDesktop(): boolean {
@@ -57,28 +51,12 @@ class NativePermission {
 		return this._platform === 'macos';
 	}
 
-	get isNativeMacDesktop(): boolean {
-		return this._isDesktop && this._platform === 'macos';
-	}
-
 	get isLinuxWaylandDesktop(): boolean {
 		return this._isDesktop && this._platform === 'linux' && this._waylandSession;
 	}
 
-	get platform(): NativePlatform {
-		return this._platform;
-	}
-
-	get inputMonitoringStatus(): NativePermissionResult {
-		return MacPermissions.statuses['input-monitoring'];
-	}
-
 	get isInputMonitoringGranted(): boolean {
 		return MacPermissions.statuses['input-monitoring'] === 'granted';
-	}
-
-	async recheckInputMonitoring(): Promise<NativePermissionResult> {
-		return MacPermissions.refreshKind('input-monitoring');
 	}
 
 	setInputMonitoringStatus(status: NativePermissionResult): void {

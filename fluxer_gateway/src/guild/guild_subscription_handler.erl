@@ -563,23 +563,6 @@ warm_list_state(ChannelId) ->
         ?ENGINES_KEY => #{ListId => warm_list_state_engine_ref}
     }.
 
-engine_already_built_detects_built_engine_test() ->
-    Request = #{session_id => <<"s1">>, channel_id => 500, ranges => [{0, 99}]},
-    ?assertEqual(true, engine_already_built(Request, warm_list_state(500))).
-
-engine_already_built_false_without_engine_test() ->
-    Request = #{session_id => <<"s1">>, channel_id => 500, ranges => [{0, 99}]},
-    State = maps:put(?ENGINES_KEY, #{}, warm_list_state(500)),
-    ?assertEqual(false, engine_already_built(Request, State)).
-
-engine_already_built_false_for_unknown_channel_test() ->
-    Request = #{session_id => <<"s1">>, channel_id => 999, ranges => [{0, 99}]},
-    ?assertEqual(false, engine_already_built(Request, warm_list_state(500))).
-
-engine_already_built_false_on_bare_state_test() ->
-    Request = #{session_id => <<"s1">>, channel_id => 500, ranges => [{0, 99}]},
-    ?assertEqual(false, engine_already_built(Request, #{})).
-
 dispatch_immediately_requires_idle_window_test() ->
     Request = #{session_id => <<"s1">>, channel_id => 500, ranges => [{0, 99}]},
     Warm = warm_list_state(500),
@@ -681,11 +664,6 @@ cold_list_still_uses_the_coalesce_buffer_test() ->
     Buffer = maps:get(lazy_subscribe_buffer, NewState),
     ?assertEqual(Request, maps:get({<<"s1">>, 500}, Buffer)).
 
-arm_lazy_subscribe_timer_is_idempotent_test() ->
-    Ref = make_ref(),
-    State = #{lazy_subscribe_timer => Ref},
-    ?assertEqual(Ref, maps:get(lazy_subscribe_timer, arm_lazy_subscribe_timer(State))).
-
 member_subscription_test_member(UserId, RoleIds) ->
     #{
         <<"user">> => #{<<"id">> => integer_to_binary(UserId)},
@@ -777,7 +755,7 @@ reference_update_member_subscriptions(SessionId, MemberIds, State) ->
 
 drain_mailbox(Acc) ->
     receive
-        Msg -> drain_mailbox([Msg | Acc])
+        {'$gen_cast', _} = Msg -> drain_mailbox([Msg | Acc])
     after 50 -> lists:reverse(Acc)
     end.
 

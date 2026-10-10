@@ -1,5 +1,3 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-
 import {ActivityContextMiddleware} from '@app/api/infrastructure/activity/ActivityMeta';
 import {applySharedListUpdate, resetSharedListsForTests} from '@app/api/infrastructure/activity/SharedLists';
 import {IpBanMiddleware, ipBanCache} from '@app/api/middleware/IpBanMiddleware';

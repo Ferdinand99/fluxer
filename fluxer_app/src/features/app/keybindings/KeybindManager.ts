@@ -7,6 +7,7 @@ import {
 	keyboardEventReleasesComboModifier,
 	keyboardEventStartsComboPress,
 	keyboardEventTriggerMatchesCombo,
+	normalizeKeyboardShortcutKey,
 	shouldAllowLocalShortcutForChannelTextarea,
 } from '@app/features/app/keybindings/KeybindEventUtils';
 import {
@@ -104,19 +105,6 @@ import {ChannelTypes} from '@fluxer/constants/src/ChannelConstants';
 import type {I18n} from '@lingui/core';
 import CombokeysImport from 'combokeys';
 import {autorun, compareStructural, computed, reaction} from 'mobx';
-
-const normalizeKeyboardShortcutKey = (key: string): string => {
-	if (key === ' ') return 'space';
-	if (key === 'Break') return 'pause';
-	return key.toLowerCase();
-};
-
-export {comboToCombokeysStrings} from '@app/features/app/keybindings/utils/ComboShortcutStrings';
-export {keyNameForGlobalHook, physicalKeyNameForGlobalHook} from '@app/features/app/keybindings/utils/GlobalHookKeys';
-export {
-	shouldSuppressLocalShortcutForModalFocus,
-	shouldSuppressShortcutForFullscreenMedia,
-} from '@app/features/app/keybindings/utils/ModalSuppression';
 
 const ROUTE_ALLOWED_ACTIONS = new Set<KeybindCommand>(['system_open_theme_studio_popout']);
 const GAMEPAD_POLL_INTERVAL_MS = 50;

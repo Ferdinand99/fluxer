@@ -56,7 +56,7 @@ interface PendingAttachmentDownload {
 	filename: string;
 }
 
-export interface GuildHarvestAttachment {
+interface GuildHarvestAttachment {
 	id: AttachmentID;
 	filename: string;
 	size: bigint;
@@ -65,7 +65,7 @@ export interface GuildHarvestAttachment {
 	height: number | null;
 }
 
-export function buildGuildHarvestAttachment(
+function buildGuildHarvestAttachment(
 	channelId: ChannelID,
 	attachment: GuildHarvestAttachment,
 	includeAttachments: boolean,
@@ -235,7 +235,7 @@ const harvestGuildData: ArchiveTaskHandler = async (payload, helpers, attempt) =
 			let beforeMessageId: MessageID | undefined;
 			let channelDownloads: Array<PendingAttachmentDownload> = [];
 			while (messages.length < MESSAGE_LIMIT_PER_CHANNEL) {
-				const batch = await channelRepository.listMessages(channel.id, beforeMessageId, MESSAGE_BATCH_SIZE);
+				const batch = await channelRepository.messages.listMessages(channel.id, beforeMessageId, MESSAGE_BATCH_SIZE);
 				if (batch.length === 0) break;
 				for (const msg of batch) {
 					if (msg.authorId == null) continue;

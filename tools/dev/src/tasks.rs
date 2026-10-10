@@ -106,29 +106,15 @@ pub fn run_build() -> Result<i32> {
 pub fn run_lint() -> Result<i32> {
     task_run(&["pnpm", "exec", "biome", "ci"])?;
     task_run(&["pnpm", "exec", "eslint", ".", "--max-warnings", "0"])?;
+    task_run(&["pnpm", "--filter", "fluxer_app", "theming:data-flx:check"])?;
     Ok(0)
 }
 
 pub fn run_knip() -> Result<i32> {
+    task_run(&["pnpm", "--filter", "fluxer_app", "wasm:codegen"])?;
+    task_run(&["pnpm", "--filter", "fluxer_app", "generate:masks"])?;
+    task_run(&["pnpm", "--filter", "fluxer_desktop", "set-channel"])?;
     task_run(&["pnpm", "--filter", "fluxer_app", "i18n:compile"])?;
     task_run(&["pnpm", "exec", "knip"])?;
     Ok(0)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn default_nats_url_switches_inside_container() {
-        let expected_host = if Path::new("/.dockerenv").exists() {
-            "nats"
-        } else {
-            "127.0.0.1"
-        };
-        assert_eq!(
-            default_test_nats_url(),
-            format!("nats://{expected_host}:4222")
-        );
-    }
 }

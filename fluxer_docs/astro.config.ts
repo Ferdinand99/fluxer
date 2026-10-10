@@ -217,6 +217,9 @@ export default defineConfig({
 					items: [
 						'http-api/channels',
 						'http-api/messages',
+						'http-api/threads',
+						'http-api/thread-members',
+						'http-api/forums',
 						'http-api/read-states',
 						'http-api/memes',
 						'http-api/gifs',
@@ -266,6 +269,7 @@ export default defineConfig({
 						'gateway/commands',
 						'gateway/events',
 						'gateway/event-filtering',
+						'gateway/threads',
 						'gateway/limits-and-rate-limits',
 						'gateway/opcodes-and-close-codes',
 					],
@@ -286,7 +290,13 @@ export default defineConfig({
 				},
 				{
 					label: 'Voice',
-					items: ['voice', 'http-api/calls', 'http-api/streams', 'http-api/entrance-sounds'],
+					items: [
+						'voice',
+						'http-api/calls',
+						'http-api/peer-to-peer-voice',
+						'http-api/streams',
+						'http-api/entrance-sounds',
+					],
 				},
 				{
 					label: 'Admin API',
@@ -295,6 +305,7 @@ export default defineConfig({
 						'admin-api/api-keys',
 						'admin-api/users',
 						'admin-api/guilds',
+						'admin-api/threads',
 						'admin-api/applications',
 						'admin-api/reports',
 						'admin-api/messages',

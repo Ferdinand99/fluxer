@@ -8,7 +8,6 @@ import {ConnectionNagbar} from '@app/features/app/components/layout/app_layout/n
 import {CorruptedInstallationNagbar} from '@app/features/app/components/layout/app_layout/nagbars/CorruptedInstallationNagbar';
 import {DesktopDownloadNagbar} from '@app/features/app/components/layout/app_layout/nagbars/DesktopDownloadNagbar';
 import {DesktopNotificationNagbar} from '@app/features/app/components/layout/app_layout/nagbars/DesktopNotificationNagbar';
-import {DesktopUpdateReadyNagbar} from '@app/features/app/components/layout/app_layout/nagbars/DesktopUpdateReadyNagbar';
 import {DomainMovedNagbar} from '@app/features/app/components/layout/app_layout/nagbars/DomainMovedNagbar';
 import {EmailVerificationNagbar} from '@app/features/app/components/layout/app_layout/nagbars/EmailVerificationNagbar';
 import {GiftInventoryNagbar} from '@app/features/app/components/layout/app_layout/nagbars/GiftInventoryNagbar';
@@ -24,6 +23,7 @@ import {TermsAcceptanceNagbar} from '@app/features/app/components/layout/app_lay
 import {UnclaimedAccountNagbar} from '@app/features/app/components/layout/app_layout/nagbars/UnclaimedAccountNagbar';
 import {VisionaryMfaNagbar} from '@app/features/app/components/layout/app_layout/nagbars/VisionaryMfaNagbar';
 import {VoiceSessionRestoreNagbar} from '@app/features/app/components/layout/app_layout/nagbars/VoiceSessionRestoreNagbar';
+import {WindowsFontNagbar} from '@app/features/app/components/layout/app_layout/nagbars/WindowsFontNagbar';
 import {shouldShowPremiumFeatures} from '@app/features/premium/utils/PremiumUtils';
 import MobileLayout from '@app/features/ui/state/MobileLayout';
 import {SoftwareEncoderNagbar} from '@app/features/voice/components/SoftwareEncoderNagbar';
@@ -183,14 +183,6 @@ export const NagbarContainer: React.FC<NagbarContainerProps> = observer(({nagbar
 								data-flx="app.app-layout.nagbar-container.desktop-download-nagbar"
 							/>
 						);
-					case NagbarType.DESKTOP_UPDATE_READY:
-						return (
-							<DesktopUpdateReadyNagbar
-								key={nagbar.type}
-								isMobile={mobileLayout.enabled}
-								data-flx="app.app-layout.nagbar-container.desktop-update-ready-nagbar"
-							/>
-						);
 					case NagbarType.GUILD_MEMBERSHIP_CTA:
 						return (
 							<GuildMembershipCtaNagbar
@@ -237,6 +229,14 @@ export const NagbarContainer: React.FC<NagbarContainerProps> = observer(({nagbar
 								key={nagbar.type}
 								isMobile={mobileLayout.enabled}
 								data-flx="app.app-layout.nagbar-container.domain-moved-nagbar"
+							/>
+						);
+					case NagbarType.WINDOWS_FONT:
+						return (
+							<WindowsFontNagbar
+								key={nagbar.type}
+								isMobile={mobileLayout.enabled}
+								data-flx="app.app-layout.nagbar-container.windows-font-nagbar"
 							/>
 						);
 					default:

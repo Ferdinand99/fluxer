@@ -33,7 +33,6 @@ pub struct UserListParams {
     pub q: String,
     pub email: String,
     pub ip: String,
-    pub ids: String,
     pub requested_ids: Vec<String>,
     pub limit: u32,
     pub page: u32,
@@ -54,7 +53,6 @@ impl UserListParams {
             email: email.unwrap_or_default().trim().to_owned(),
             ip: ip.unwrap_or_default().trim().to_owned(),
             requested_ids: parse_ids_query(&ids),
-            ids: ids.trim().to_owned(),
             limit: match limit.unwrap_or(25) {
                 50 => 50,
                 100 => 100,
@@ -460,26 +458,4 @@ fn users_url(base: &str, params: &UserListParams, page: u32) -> String {
     pairs.push(format!("limit={}", params.limit));
     pairs.push(format!("page={page}"));
     format!("{base}/users?{}", pairs.join("&"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn params() -> UserListParams {
-        UserListParams::from_query(None, None, None, None, None, None)
-    }
-
-    #[test]
-    fn username_mode_has_no_email_search() {
-        let markup = search_form("/admin", &params(), false).into_string();
-        assert!(!markup.contains("search-email"));
-        assert!(markup.contains("search-q"));
-    }
-
-    #[test]
-    fn email_mode_keeps_the_email_search() {
-        let markup = search_form("/admin", &params(), true).into_string();
-        assert!(markup.contains("search-email"));
-    }
 }

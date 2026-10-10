@@ -6,7 +6,7 @@ import type {DesktopHandoffAPI} from '@fluxer/desktop_ipc/src/BrowserHandoffCont
 import type {DesktopCapabilityManifest} from '@fluxer/desktop_ipc/src/CapabilityManifest';
 import type {NativeGatewayTransportAPI} from '@fluxer/desktop_ipc/src/GatewayTransportContract';
 import type {DesktopKnownInstanceStorageAPI} from '@fluxer/desktop_ipc/src/KnownInstanceContract';
-import type {DesktopModuleAPI} from '@fluxer/desktop_ipc/src/ModuleContract';
+import type {DesktopModuleAPI, DesktopUpdateAPI} from '@fluxer/desktop_ipc/src/ModuleContract';
 import type {DesktopStorageAPI} from '@fluxer/desktop_ipc/src/StorageContract';
 import type {VoiceEngineV2BridgeHardwareEncoderApi} from '@fluxer/voice_engine_v2/bridge';
 import type {
@@ -217,8 +217,6 @@ export type UpdaterEvent =
 			type: 'available';
 			context: UpdaterContext;
 			version: string | null;
-			downloadSize?: number | null;
-			downloadStarted: boolean;
 			downloadUrl?: string;
 			downloadOptions?: Array<UpdaterDownloadOption>;
 	  }
@@ -227,23 +225,9 @@ export type UpdaterEvent =
 			context: UpdaterContext;
 	  }
 	| {
-			type: 'downloaded';
-			context: UpdaterContext;
-			version: string | null;
-	  }
-	| {
-			type: 'progress';
-			context: UpdaterContext;
-			percent: number;
-			transferred: number;
-			total: number;
-			bytesPerSecond: number;
-	  }
-	| {
 			type: 'error';
 			context: UpdaterContext;
 			message: string;
-			phase?: 'check' | 'download' | 'install';
 	  }
 	| {
 			type: 'unsupported';
@@ -295,51 +279,11 @@ export interface VirtmicAvailability {
 
 export type VirtmicNode = Record<string, string>;
 
-export interface VirtmicRoutingGraphNode {
-	id: number;
-	props: VirtmicNode;
-}
-
-export interface VirtmicRoutingGraphPort {
-	id: number;
-	nodeId: number;
-	direction: string;
-	channel: string;
-	props: VirtmicNode;
-}
-
-export interface VirtmicRoutingGraphLink {
-	outputNodeId: number;
-	outputPortId: number;
-	inputNodeId: number;
-	inputPortId: number;
-	owned: boolean;
-	passive: boolean;
-}
-
-export interface VirtmicRoutingGraph {
-	backend: VirtmicBackend | 'none' | string;
-	nodes: Array<VirtmicRoutingGraphNode>;
-	ports: Array<VirtmicRoutingGraphPort>;
-	ownedLinks: Array<VirtmicRoutingGraphLink>;
-}
-
-export interface VirtmicRoutingGraphResult {
-	ok: boolean;
-	graph?: VirtmicRoutingGraph;
-	availability: VirtmicAvailability;
-}
-
 export interface VirtmicLinkOptions {
 	ignoreDevices?: boolean;
 	ignoreInputMedia?: boolean;
 	ignoreVirtual?: boolean;
 	workaround?: boolean;
-}
-
-export interface VirtmicSystemLinkOptions extends VirtmicLinkOptions {
-	onlySpeakers?: boolean;
-	onlyDefaultSpeakers?: boolean;
 }
 
 export interface VirtmicApi {
@@ -349,10 +293,6 @@ export interface VirtmicApi {
 		targets?: Array<VirtmicNode>;
 		availability: VirtmicAvailability;
 	}>;
-	getRoutingGraph: () => Promise<VirtmicRoutingGraphResult>;
-	startInclude: (include: Array<VirtmicNode>, options?: VirtmicLinkOptions) => Promise<boolean>;
-	startSystem: (exclude: Array<VirtmicNode>, options?: VirtmicSystemLinkOptions) => Promise<boolean>;
-	resolveWindowPid: (sourceId: string) => Promise<number | null>;
 	stop: () => Promise<void>;
 }
 
@@ -424,17 +364,6 @@ export interface NativeAudioEndMessage {
 	detail?: string;
 }
 
-export interface NativeAudioRoutingGraphSnapshot {
-	captureId: string;
-	graph: VirtmicRoutingGraph | null;
-}
-
-export interface NativeAudioRoutingGraphResult {
-	ok: boolean;
-	graphs: Array<NativeAudioRoutingGraphSnapshot>;
-	availability: NativeAudioAvailability;
-}
-
 export interface NativeAudioApi {
 	getAvailability: () => Promise<NativeAudioAvailability>;
 	listAudibleApplications: () => Promise<Array<NativeAudioApplication>>;
@@ -442,82 +371,8 @@ export interface NativeAudioApi {
 	start: (options: NativeAudioStartOptions) => Promise<NativeAudioStartResult>;
 	setRule: (captureId: string, linuxRule: NonNullable<NativeAudioStartOptions['linuxRule']>) => Promise<boolean>;
 	stop: (captureId: string) => Promise<void>;
-	getRoutingGraph: (captureId?: string) => Promise<NativeAudioRoutingGraphResult>;
 	onFrame: (callback: (message: NativeAudioFrameMessage) => void) => () => void;
 	onEnd: (callback: (message: NativeAudioEndMessage) => void) => () => void;
-}
-
-export type NativeScreenCaptureBackend = 'macos-sck' | 'windows-dxgi' | 'windows-game-capture' | 'linux-pipewire';
-export type WindowsHagsState = 'enabled' | 'disabled' | 'unknown' | 'unsupported';
-
-export interface NativeScreenCaptureAvailability {
-	available: boolean;
-	backend?: NativeScreenCaptureBackend;
-	capabilities?: {
-		hidesCursor: boolean;
-		screens: boolean;
-		windows: boolean;
-	};
-	reason?:
-		| 'unsupported-platform'
-		| 'addon-not-installed'
-		| 'load-failed'
-		| 'os-version-too-old'
-		| 'permission-denied'
-		| 'disabled-by-launch';
-	detail?: string;
-	windowsHagsState?: WindowsHagsState;
-	windowsHagsDetail?: string;
-}
-
-export type NativeScreenCaptureSourceKind = 'screen' | 'window' | 'game';
-
-export interface NativeScreenCaptureSource {
-	kind: NativeScreenCaptureSourceKind;
-	id: string;
-	name: string;
-	width: number;
-	height: number;
-	appName?: string;
-	bundleId?: string;
-	targetPid?: number;
-}
-
-export interface NativeScreenCaptureRect {
-	x: number;
-	y: number;
-	width: number;
-	height: number;
-}
-
-export interface NativeScreenCaptureStartOptions {
-	sourceId: string;
-	sourceKind: NativeScreenCaptureSourceKind;
-	width?: number;
-	height?: number;
-	frameRate?: number;
-	captureId?: string;
-	colorRange?: 'full' | 'limited';
-	colorSpace?: 'rec709' | 'srgb';
-	showCursorClicks?: boolean;
-	captureRect?: NativeScreenCaptureRect;
-	nativeFrameSinkRequired: true;
-}
-
-export interface NativeScreenCaptureStartResult {
-	captureId: string;
-	width: number;
-	height: number;
-	frameRate: number;
-	pixelFormat: 'nv12' | 'bgra';
-}
-
-export type NativeScreenCaptureEndReason = 'stopped' | 'source-vanished' | 'addon-error';
-
-export interface NativeScreenCaptureEndMessage {
-	captureId: string;
-	reason: NativeScreenCaptureEndReason;
-	detail?: string;
 }
 
 export type NativeScreenCaptureLifecycleEventKind = 'error' | 'closed' | 'closed-clean' | 'stalled' | 'diagnostic';
@@ -531,56 +386,7 @@ export interface NativeScreenCaptureLifecycleMessage {
 	source?: NativeScreenCaptureLifecycleSource;
 }
 
-export type NativeScreenCaptureStrategy = 'wgc' | 'dxgi-duplication' | 'window-gdi' | string;
-
-export interface NativeScreenCaptureDiagnostics {
-	state?: number;
-	apiType?: number;
-	transport?: number;
-	fallbackReason?: number;
-	captureFlags?: number;
-	width?: number;
-	height?: number;
-	dxgiFormat?: number;
-	frameCounter?: number;
-	droppedFrameCounter?: number;
-	lastPresentTimestampUs?: number;
-	lastError?: number;
-	activeStrategy?: NativeScreenCaptureStrategy;
-	lastFallbackReason?: string;
-	backend?: string;
-	requestedImportMode?: string;
-	importMode?: string;
-	mapHost?: boolean;
-	noModifiers?: boolean;
-	linear?: boolean;
-	zeroCopy?: boolean;
-	gpuImportAvailable?: boolean;
-	deviceUuidAdvertised?: boolean;
-	supportedImportModes?: Array<string>;
-	clientConnected?: boolean;
-	connectedClient?: string;
-	connectedPid?: number;
-	textureFormat?: string;
-	textureModifier?: string;
-	unsupportedFrameCounter?: number;
-	lastDiagnostic?: string;
-	lastAddonError?: string;
-	captureId?: string;
-	sourceId?: string;
-	sourceKind?: NativeScreenCaptureSourceKind;
-	startedAtMs?: number;
-	windowsHagsState?: WindowsHagsState;
-	windowsHagsDetail?: string;
-}
-
 export interface NativeScreenCaptureApi {
-	getAvailability: () => Promise<NativeScreenCaptureAvailability>;
-	listSources: () => Promise<Array<NativeScreenCaptureSource>>;
-	start: (options: NativeScreenCaptureStartOptions) => Promise<NativeScreenCaptureStartResult>;
-	getDiagnostics: (captureId: string) => Promise<NativeScreenCaptureDiagnostics | null>;
-	stop: (captureId: string) => Promise<void>;
-	onEnd: (callback: (message: NativeScreenCaptureEndMessage) => void) => () => void;
 	onLifecycleEvent: (callback: (message: NativeScreenCaptureLifecycleMessage) => void) => () => void;
 }
 
@@ -671,13 +477,8 @@ export interface ElectronAPI {
 	setDesktopDisableHardwareAcceleration: (
 		options: SetDesktopTroubleshootingDisableHardwareAccelerationOptions,
 	) => Promise<DesktopTroubleshootingSettings>;
-	desktopTroubleshootingReload: () => Promise<void>;
-	desktopTroubleshootingResetAppData: (options?: {confirm?: boolean}) => Promise<void>;
-	popupHelpMenu: () => Promise<void>;
 	onUpdaterEvent: (callback: (event: UpdaterEvent) => void) => () => void;
 	updaterCheck: (context: UpdaterContext) => Promise<void>;
-	updaterDownload: (context: UpdaterContext) => Promise<void>;
-	updaterInstall: () => Promise<void>;
 	windowMinimize: () => void;
 	windowMaximize: () => void;
 	windowClose: () => void;
@@ -712,7 +513,6 @@ export interface ElectronAPI {
 	getScreenRecordingPermissionStatus: () => Promise<InputMonitoringPermissionStatus>;
 	requestScreenRecordingPermission: () => Promise<InputMonitoringPermissionStatus>;
 	downloadFile: (url: string, defaultPath: string, sha256?: string | null) => Promise<DownloadFileResult>;
-	toggleDevTools: () => void;
 	showNotification: (options: NotificationOptions) => Promise<NotificationResult>;
 	shouldPlayNotificationSound: () => Promise<boolean>;
 	getStreamerModeCaptureAppStatus: () => Promise<StreamerModeCaptureAppStatus>;
@@ -720,16 +520,12 @@ export interface ElectronAPI {
 	closeNotifications: (ids: Array<string>) => void;
 	onNotificationClick: (callback: (id: string, url?: string) => void) => () => void;
 	setBadgeCount: (count: number) => void;
-	getBadgeCount: () => Promise<number>;
-	bounceDock: (type?: 'critical' | 'informational') => number;
-	cancelBounceDock: (id: number) => void;
 	setNativeLocale: (locale: string, strings: Record<string, string>) => void;
 	flashFrame: (persistent?: boolean) => void;
 	stopFlashFrame: () => void;
 	setTaskbarProgress: (fraction: number, mode?: 'normal' | 'indeterminate' | 'error' | 'paused' | 'none') => void;
 	onJumpListNewDm: (callback: () => void) => () => void;
 	setZoomFactor: (factor: number) => void;
-	getZoomFactor: () => Promise<number>;
 	getAccessibilitySupportEnabled: () => Promise<boolean>;
 	onAccessibilitySupportChanged: (callback: (enabled: boolean) => void) => () => void;
 	getLinuxAppearance: () => Promise<LinuxAppearanceSnapshot>;
@@ -741,12 +537,10 @@ export interface ElectronAPI {
 	setTrayRuntimeState: (state: Partial<TrayRuntimeStatePayload>) => void;
 	acquireStreamingPriority: () => void;
 	releaseStreamingPriority: () => void;
-	resetStreamingPriority: () => void;
 	getStreamingPriorityDiagnostics: () => Promise<StreamingPriorityDiagnostics>;
 	onTrayAction: (callback: (action: TrayActionPayload) => void) => () => void;
 	globalKeyHookStart: () => Promise<boolean>;
 	globalKeyHookStop: () => Promise<void>;
-	globalKeyHookIsRunning: () => Promise<boolean>;
 	checkInputMonitoringAccess: () => Promise<boolean>;
 	globalKeyHookRegister: (options: GlobalKeyHookRegisterOptions) => Promise<void>;
 	globalKeyHookUnregister: (id: string) => Promise<void>;
@@ -770,11 +564,9 @@ export interface ElectronAPI {
 	onGlobalMouseEvent: (callback: (event: GlobalMouseEvent) => void) => () => void;
 	onGlobalKeybindTriggered: (callback: (event: GlobalKeybindTriggeredEvent) => void) => () => void;
 	globalShortcuts: GlobalShortcutsApi;
-	spellcheckGetState: () => Promise<SpellcheckState>;
 	spellcheckSetState: (state: Partial<SpellcheckState>) => Promise<SpellcheckState>;
 	spellcheckGetAvailableLanguages: () => Promise<Array<string>>;
 	spellcheckGetBundledDictionaries: () => Promise<Array<SpellcheckBundledDictionary>>;
-	spellcheckSuggest: (word: string) => Promise<Array<string>>;
 	onSpellcheckStateChanged: (callback: (state: SpellcheckState) => void) => () => void;
 	onSpellcheckEngineResolved: (callback: (info: SpellcheckResolvedEngineInfo) => void) => () => void;
 	onTextareaContextMenu: (callback: (params: TextareaContextMenuParams) => void) => () => void;
@@ -806,6 +598,7 @@ export interface ElectronAPI {
 	getAppMetrics?: () => Promise<AppMetricsSnapshot>;
 	capabilities: DesktopCapabilityManifest;
 	desktopModules: DesktopModuleAPI;
+	desktopUpdate: DesktopUpdateAPI;
 	reportLastRoute: (routePath: string) => void;
 	notifyFirstContentPainted: () => void;
 	desktopAccounts: DesktopAccountStorageAPI;

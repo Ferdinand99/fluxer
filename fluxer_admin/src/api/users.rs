@@ -41,16 +41,6 @@ impl AdminApiClient {
         })
     }
 
-    pub async fn lookup_user(&self, query: &str) -> ApiResult<Option<AdminUser>> {
-        let response = self
-            .generated()
-            .list_admin_users(None, None, None, None, None, Some(query), None)
-            .await
-            .map_err(|e| self.generated_error(e))?;
-        let resp: LookupUserResponse = self.generated_value(response.into_inner())?;
-        Ok(resp.users.into_iter().next())
-    }
-
     pub async fn lookup_users_by_ids(&self, user_ids: &[String]) -> ApiResult<Vec<AdminUser>> {
         if user_ids.is_empty() {
             return Ok(vec![]);
@@ -300,6 +290,28 @@ impl AdminApiClient {
         let response = self
             .generated()
             .clear_admin_user_profile_fields(&snowflake(user_id), &body)
+            .await
+            .map_err(|e| self.generated_error(e))?;
+        let resp: UserMutationResponse = self.generated_value(response.into_inner())?;
+        Ok(resp.user)
+    }
+
+    pub async fn set_bot_status(&self, user_id: &str, is_bot: bool) -> ApiResult<AdminUser> {
+        let body = generated_types::AdminUserBotStatusRequest { bot: is_bot };
+        let response = self
+            .generated()
+            .set_admin_user_bot_status(&snowflake(user_id), &body)
+            .await
+            .map_err(|e| self.generated_error(e))?;
+        let resp: UserMutationResponse = self.generated_value(response.into_inner())?;
+        Ok(resp.user)
+    }
+
+    pub async fn set_system_status(&self, user_id: &str, is_system: bool) -> ApiResult<AdminUser> {
+        let body = generated_types::AdminUserSystemStatusRequest { system: is_system };
+        let response = self
+            .generated()
+            .set_admin_user_system_status(&snowflake(user_id), &body)
             .await
             .map_err(|e| self.generated_error(e))?;
         let resp: UserMutationResponse = self.generated_value(response.into_inner())?;

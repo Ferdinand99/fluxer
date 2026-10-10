@@ -39,6 +39,7 @@ export interface ChannelRow {
 	user_limit: Nullish<number>;
 	voice_connection_limit: Nullish<number>;
 	rtc_region: Nullish<string>;
+	rtc_p2p: Nullish<boolean>;
 	last_message_id: Nullish<MessageID>;
 	last_pin_timestamp: Nullish<Date>;
 	permission_overwrites: Nullish<Map<RoleID | UserID, PermissionOverwrite>>;
@@ -82,7 +83,7 @@ export interface WebhooksBySourceChannelRow {
 	guild_id: GuildID;
 }
 
-export type CrosspostedMessageState = 'pending' | 'delivered';
+type CrosspostedMessageState = 'pending' | 'delivered';
 
 export interface CrosspostedMessageRow {
 	source_message_id: MessageID;
@@ -156,6 +157,7 @@ export const CHANNEL_COLUMNS = [
 	'user_limit',
 	'voice_connection_limit',
 	'rtc_region',
+	'rtc_p2p',
 	'last_message_id',
 	'last_pin_timestamp',
 	'permission_overwrites',

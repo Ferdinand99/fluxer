@@ -4,11 +4,11 @@ import {randomInt} from 'node:crypto';
 import type {ChannelID, UserID} from '@app/api/BrandedTypes';
 import {createMessageID} from '@app/api/BrandedTypes';
 import {mapChannelToResponse} from '@app/api/channel/ChannelMappers';
-import type {IChannelRepositoryAggregate} from '@app/api/channel/repositories/IChannelRepositoryAggregate';
+import type {ChannelRepository} from '@app/api/channel/ChannelRepository';
 import {dispatchChannelDelete} from '@app/api/channel/services/group_dm/GroupDmHelpers';
 import {dispatchMessageCreateBroadcast} from '@app/api/channel/services/message/MessageGatewayDispatch';
 import type {MessagePersistenceService} from '@app/api/channel/services/message/MessagePersistenceService';
-import type {IGuildRepositoryAggregate} from '@app/api/guild/repositories/IGuildRepositoryAggregate';
+import type {GuildRepository} from '@app/api/guild/repositories/GuildRepository';
 import type {IGatewayService} from '@app/api/infrastructure/IGatewayService';
 import type {ILiveKitService} from '@app/api/infrastructure/ILiveKitService';
 import type {ISnowflakeService} from '@app/api/infrastructure/ISnowflakeService';
@@ -23,7 +23,8 @@ import type {Channel} from '@app/api/models/Channel';
 import type {User} from '@app/api/models/User';
 import {deleteChannelMessageSearchDocuments} from '@app/api/search/MessageSearchIndexCleanup';
 import {assertAccountNotLimited} from '@app/api/user/AccountLimit';
-import type {IUserRepository} from '@app/api/user/IUserRepository';
+import type {UserRepository} from '@app/api/user/repositories/UserRepository';
+import {canUserAccessNsfwContent} from '@app/api/utils/AgeUtils';
 import {UserPermissionUtils} from '@app/api/utils/UserPermissionUtils';
 import {ChannelTypes, MessageTypes} from '@fluxer/constants/src/ChannelConstants';
 import type {LimitKey} from '@fluxer/constants/src/LimitConfigMetadata';
@@ -36,15 +37,16 @@ import {UnknownChannelError} from '@fluxer/errors/src/domains/channel/UnknownCha
 import {CannotRemoveOtherRecipientsError} from '@fluxer/errors/src/domains/core/CannotRemoveOtherRecipientsError';
 import {InputValidationError} from '@fluxer/errors/src/domains/core/InputValidationError';
 import {MissingAccessError} from '@fluxer/errors/src/domains/core/MissingAccessError';
+import {NsfwContentRequiresAgeVerificationError} from '@fluxer/errors/src/domains/moderation/NsfwContentRequiresAgeVerificationError';
 import {NotFriendsWithUserError} from '@fluxer/errors/src/domains/user/NotFriendsWithUserError';
 
 export class GroupDmOperationsService {
 	private readonly userPermissionUtils: UserPermissionUtils;
 
 	constructor(
-		private channelRepository: IChannelRepositoryAggregate,
-		private userRepository: IUserRepository,
-		guildRepository: IGuildRepositoryAggregate,
+		private channelRepository: ChannelRepository,
+		private userRepository: UserRepository,
+		guildRepository: GuildRepository,
 		private userCacheService: UserCacheService,
 		private gatewayService: IGatewayService,
 		private snowflakeService: ISnowflakeService,
@@ -84,6 +86,9 @@ export class GroupDmOperationsService {
 			userId,
 			targetId: recipientId,
 		});
+		if (channel.isNsfw && !(await this.canJoinMatureGroup(recipientId))) {
+			throw new MissingAccessError();
+		}
 		const {channel: updatedChannel} = await this.addRecipientViaInviteWithResult({
 			channelId,
 			recipientId,
@@ -120,6 +125,11 @@ export class GroupDmOperationsService {
 			requestCache,
 		});
 		return updatedChannel;
+	}
+
+	private async canJoinMatureGroup(userId: UserID): Promise<boolean> {
+		const user = await this.userRepository.findUnique(userId);
+		return user != null && canUserAccessNsfwContent(user);
 	}
 
 	private async assertInviterNotLimited(userId: UserID): Promise<void> {
@@ -168,6 +178,9 @@ export class GroupDmOperationsService {
 		}
 		if (channel.recipientIds.has(recipientId)) {
 			return {channel, recipientAdded: false};
+		}
+		if (channel.isNsfw && !(await this.canJoinMatureGroup(recipientId))) {
+			throw new NsfwContentRequiresAgeVerificationError();
 		}
 		const inviterUser = inviterId ? await this.userRepository.findUnique(inviterId) : null;
 		const fallbackLimit = MAX_GROUP_DM_RECIPIENTS;

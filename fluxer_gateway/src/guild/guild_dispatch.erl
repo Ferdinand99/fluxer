@@ -7,10 +7,6 @@
 
 -export([
     handle_dispatch/3,
-    extract_and_remove_session_id/1,
-    decorate_member_data/3,
-    extract_member_for_event/3,
-    collect_and_send_push_notifications/3,
     normalize_event/1,
     is_member_list_updates_enabled/1
 ]).
@@ -150,46 +146,12 @@ extract_session_id_if_needed(message_reaction_remove, EventData) ->
 extract_session_id_if_needed(_, EventData) ->
     {undefined, EventData}.
 
--spec extract_and_remove_session_id(event_data()) -> {binary() | undefined, event_data()}.
-extract_and_remove_session_id(Data) ->
-    guild_dispatch_decorate:extract_and_remove_session_id(Data).
-
--spec decorate_member_data(event(), event_data(), guild_state()) -> event_data().
-decorate_member_data(Event, Data, State) ->
-    guild_dispatch_decorate:decorate_member_data(Event, Data, State).
-
--spec extract_member_for_event(event(), event_data(), guild_state()) -> map() | undefined.
-extract_member_for_event(Event, Data, State) ->
-    guild_dispatch_decorate:extract_member_for_event(Event, Data, State).
-
--spec collect_and_send_push_notifications(event_data(), integer(), guild_state()) -> ok.
-collect_and_send_push_notifications(MessageData, GuildId, State) ->
-    guild_dispatch_push:collect_and_send_push_notifications(MessageData, GuildId, State).
-
 -spec is_member_list_updates_enabled(guild_state()) -> boolean().
 is_member_list_updates_enabled(State) ->
     guild_dispatch_config:is_member_list_updates_enabled(State).
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
-
-extract_session_id_if_needed_reaction_test() ->
-    Data = #{<<"session_id">> => <<"sid">>, <<"emoji">> => #{}},
-    {SessionId, CleanData} = extract_session_id_if_needed(message_reaction_add, Data),
-    ?assertEqual(<<"sid">>, SessionId),
-    ?assertNot(maps:is_key(<<"session_id">>, CleanData)).
-
-extract_session_id_if_needed_other_test() ->
-    Data = #{<<"session_id">> => <<"sid">>, <<"content">> => <<"hi">>},
-    {SessionId, CleanData} = extract_session_id_if_needed(message_create, Data),
-    ?assertEqual(undefined, SessionId),
-    ?assertEqual(Data, CleanData).
-
-extract_session_id_if_needed_reaction_remove_test() ->
-    Data = #{<<"session_id">> => <<"sid">>, <<"emoji">> => #{}},
-    {SessionId, CleanData} = extract_session_id_if_needed(message_reaction_remove, Data),
-    ?assertEqual(<<"sid">>, SessionId),
-    ?assertNot(maps:is_key(<<"session_id">>, CleanData)).
 
 should_skip_dispatch_guild_update_never_skipped_test() ->
     State = #{

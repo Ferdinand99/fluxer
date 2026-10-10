@@ -31,7 +31,9 @@ The desktop client follows upstream's architecture:
   to the download page (`MAC_SELF_UPDATE_ENABLED` in `ShellUpdateCapability.ts`).
 - **Release pipeline**: `.github/workflows/release-fluxins.yaml`, unsigned and limited to Windows x64 and
   macOS arm64.
-- **CI**: `.github/workflows/tests.yaml` only runs the jobs that matter for the client.
+- **CI**: `.github/workflows/tests.yaml` only runs the jobs that matter for the client. Upstream's
+  `desktop-windows-release-check.yaml` is removed: it checks builds published on Fluxer's own feed and starts on
+  pull requests.
 
 ## Releasing
 

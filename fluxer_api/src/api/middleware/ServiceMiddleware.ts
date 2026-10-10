@@ -92,7 +92,6 @@ import {
 	getKVBulkMessageDeletionQueue,
 	getKVThreadAutoArchiveQueue,
 	getLimitConfigService,
-	getNcmecSubmissionService,
 	getOAuth2TokenRepository,
 	getPasswordChangeRepository,
 	getPremiumStateReconciliationQueueService,
@@ -163,6 +162,7 @@ export function getReportServiceInstance(): ReportService {
 			getStorageService(),
 			getGatewayService(),
 			getRateLimitService(),
+			getWebhookRepository(),
 			getReportSearchService(),
 		);
 	}
@@ -298,6 +298,7 @@ class RequestServices implements RequestScopedServices {
 							getChannelRepository(),
 							voiceRoomStore,
 							voiceAvailabilityService,
+							getInstanceConfigRepository(),
 						)
 					: null;
 		}
@@ -425,10 +426,6 @@ class RequestServices implements RequestScopedServices {
 
 	get limitConfigService() {
 		return getLimitConfigService();
-	}
-
-	get ncmecSubmissionService() {
-		return getNcmecSubmissionService();
 	}
 
 	get oauth2TokenRepository() {
@@ -580,7 +577,7 @@ class RequestServices implements RequestScopedServices {
 	get singleCommunityService(): SingleCommunityService {
 		this.cachedSingleCommunityService ??= new SingleCommunityService(
 			getInstanceConfigRepository(),
-			this.guildService.data,
+			this.guildService.data.operations,
 			this.guildService.members,
 		);
 		return this.cachedSingleCommunityService;

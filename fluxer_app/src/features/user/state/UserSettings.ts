@@ -20,6 +20,7 @@ import {Logger} from '@app/features/platform/utils/AppLogger';
 import LocalPresence, {setLocalPresenceUserSettings} from '@app/features/presence/state/LocalPresence';
 import Theme from '@app/features/theme/state/Theme';
 import MobileLayout from '@app/features/ui/state/MobileLayout';
+import {PRIVACY_SETUP_VERSION} from '@app/features/user/constants/PrivacySetupConstants';
 import {
 	type CustomStatus,
 	normalizeCustomStatus,
@@ -28,9 +29,6 @@ import {
 import {setSyncedFieldUserSettings} from '@app/features/user/state/SyncedField';
 import {
 	changedSyncedPreferenceFields,
-	createEmptySyncedPreferences,
-	decodeSyncedPreferencesLenient,
-	encodeSyncedPreferences,
 	isSyncedPreferencesField,
 	mergeIncomingSyncedPreferences as mergeIncomingSyncedPreferencesWithEngine,
 	preferencesFromBytes,
@@ -53,6 +51,11 @@ import {
 	ThemeTypes,
 	TimeFormatTypes,
 } from '@fluxer/constants/src/UserConstants';
+import {
+	createEmptySyncedPreferences,
+	decodeSyncedPreferencesLenient,
+	encodeSyncedPreferences,
+} from '@fluxer/schema/src/domains/user/SyncedPreferencesCodec';
 import camelCase from 'lodash/camelCase';
 import isEqual from 'lodash/isEqual';
 import isPlainObject from 'lodash/isPlainObject';
@@ -110,6 +113,7 @@ export interface UserSettings {
 	groupDmAddPermissionFlags: number;
 	profilePrivacy: ProfilePrivacyLevel;
 	defaultShareVoiceActivity: boolean;
+	privacySetupVersion: number | null;
 	guildFolders: Array<GuildFolder>;
 	customStatus: CustomStatus | null;
 	afkTimeout: number;
@@ -298,6 +302,7 @@ class UserSettingsState {
 	groupDmAddPermissionFlags: number = 0;
 	profilePrivacy: ProfilePrivacyLevel = ProfilePrivacyLevels.ALL_GUILDS;
 	defaultShareVoiceActivity: boolean = true;
+	privacySetupVersion: number | null = null;
 	guildFolders: Array<GuildFolder> = [];
 	customStatus: CustomStatus | null = null;
 	afkTimeout: number = 600;
@@ -389,14 +394,6 @@ class UserSettingsState {
 		writePersistedSyncedPreferences(SYNCED_PREFERENCES_WIRE_KEY, this.wireSyncedPreferences);
 	}
 
-	getFlags(): number {
-		return this.flags;
-	}
-
-	getStatus(): StatusType {
-		return this.status;
-	}
-
 	getStatusResetsAt(): string | null {
 		return this.statusResetsAt;
 	}
@@ -409,24 +406,12 @@ class UserSettingsState {
 		return this.timeFormat;
 	}
 
-	getGuildPositions(): ReadonlyArray<string> {
-		return this.guildFolders.flatMap((folder) => folder.guildIds);
-	}
-
 	getLocale(): string {
 		return this.locale;
 	}
 
 	applyLocalLocale(locale: string): void {
 		this.locale = applyLocaleChange(locale);
-	}
-
-	getRestrictedGuilds(): ReadonlyArray<string> {
-		return this.restrictedGuilds;
-	}
-
-	getBotRestrictedGuilds(): ReadonlyArray<string> {
-		return this.botRestrictedGuilds;
 	}
 
 	getBotDefaultGuildsRestricted(): boolean {
@@ -439,10 +424,6 @@ class UserSettingsState {
 
 	getInlineAttachmentMedia(): boolean {
 		return this.inlineAttachmentMedia;
-	}
-
-	getInlineEmbedMedia(): boolean {
-		return this.inlineEmbedMedia;
 	}
 
 	getMotionPreferencesInput(): MotionPreferencesInput {
@@ -487,10 +468,6 @@ class UserSettingsState {
 		return selectEffectiveAnimateStickers(createMotionPreferencesContext(this.getMotionPreferencesInput()));
 	}
 
-	getRenderSpoilers(): number {
-		return this.renderSpoilers;
-	}
-
 	getMessageDisplayCompact(): boolean {
 		if (MobileLayout.isMobileLayout()) {
 			return false;
@@ -518,8 +495,8 @@ class UserSettingsState {
 		return this.defaultShareVoiceActivity;
 	}
 
-	getGuildFolders(): ReadonlyArray<GuildFolder> {
-		return this.guildFolders;
+	isPrivacySetupPending(): boolean {
+		return this.hydrated && this.privacySetupVersion !== null && this.privacySetupVersion < PRIVACY_SETUP_VERSION;
 	}
 
 	getCustomStatus(): CustomStatus | null {
@@ -528,10 +505,6 @@ class UserSettingsState {
 
 	getAfkTimeout(): number {
 		return this.afkTimeout;
-	}
-
-	getDeveloperMode(): boolean {
-		return this.developerMode;
 	}
 
 	getTrustedDomains(): ReadonlyArray<string> {
@@ -546,28 +519,12 @@ class UserSettingsState {
 		return this.defaultHideMutedChannels;
 	}
 
-	getSensitiveContentFriendDmFilter(): number {
-		return this.sensitiveContentFriendDmFilter;
-	}
-
-	getSensitiveContentNonFriendDmFilter(): number {
-		return this.sensitiveContentNonFriendDmFilter;
-	}
-
-	getSensitiveContentGuildFilter(): number {
-		return this.sensitiveContentGuildFilter;
-	}
-
 	getSuppressUnprivilegedSelfMentions(): boolean {
 		return this.suppressUnprivilegedSelfMentions;
 	}
 
 	getSuppressUnprivilegedSelfMentionsBypassUserIds(): ReadonlyArray<string> {
 		return this.suppressUnprivilegedSelfMentionsBypassUserIds;
-	}
-
-	getSuppressUnprivilegedSelfMentionBypassUserIds(): ReadonlyArray<string> {
-		return this.getSuppressUnprivilegedSelfMentionsBypassUserIds();
 	}
 
 	getStaffDmAccessUserIds(): ReadonlyArray<string> {
@@ -692,6 +649,7 @@ class UserSettingsState {
 		const {hydrate = true} = options;
 		const previousStatus = this.status;
 		const previousCustomStatus = this.customStatus;
+		const previousAfkTimeout = this.afkTimeout;
 		const wasHydrated = this.hydrated;
 		if (userSettings === null || userSettings === undefined) {
 			return;
@@ -738,6 +696,7 @@ class UserSettingsState {
 		if (camelCaseSettings.defaultShareVoiceActivity !== undefined) {
 			this.defaultShareVoiceActivity = camelCaseSettings.defaultShareVoiceActivity;
 		}
+		this.privacySetupVersion = camelCaseSettings.privacySetupVersion ?? null;
 		this.guildFolders = camelCaseSettings.guildFolders.map((folder) => ({
 			...folder,
 			flags: folder.flags ?? 0,
@@ -784,13 +743,11 @@ class UserSettingsState {
 		) {
 			this.mergeIncomingSyncedPreferences(decodeSyncedPreferencesLenient(incomingSyncedPreferences));
 		}
-		if (normalizedStatus !== previousStatus) {
-			const presence = LocalPresence.getPresence();
-			if (!presence.afk) {
-				LocalPresence.updatePresence();
-			}
-		}
-		if (!isEqual(this.customStatus, previousCustomStatus)) {
+		if (
+			normalizedStatus !== previousStatus ||
+			!isEqual(this.customStatus, previousCustomStatus) ||
+			this.afkTimeout !== previousAfkTimeout
+		) {
 			LocalPresence.updatePresence();
 		}
 		if (hydrate && !wasHydrated) {
@@ -829,6 +786,7 @@ class UserSettingsState {
 			groupDmAddPermissionFlags: this.groupDmAddPermissionFlags,
 			profilePrivacy: this.profilePrivacy,
 			defaultShareVoiceActivity: this.defaultShareVoiceActivity,
+			privacySetupVersion: this.privacySetupVersion,
 			guildFolders: this.guildFolders.map((folder) => ({
 				...folder,
 				guildIds: [...folder.guildIds],

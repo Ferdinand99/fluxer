@@ -8,7 +8,6 @@
     is_engine_list/2,
     ensure/2,
     rebuild/2,
-    rebuild_all/1,
     rebuild_channels/2,
     drop/2,
     destroy_all/1,
@@ -17,7 +16,6 @@
     update_user_all/2,
     remove_user/3,
     remove_user_all/2,
-    member_index/3,
     set_hoisted_roles_all/2
 ]).
 
@@ -72,14 +70,6 @@ replace_engine(ListId, ChannelId, OldRef, State) ->
     State1 = put_engines(maps:put(ListId, NewRef, engines(State)), State),
     guild_member_list_engine:destroy(OldRef),
     guild_member_list_engine_inputs:record(ListId, ChannelId, State, State1).
-
--spec rebuild_all(guild_state()) -> guild_state().
-rebuild_all(State) ->
-    lists:foldl(
-        fun rebuild/2,
-        State,
-        maps:keys(engines(State))
-    ).
 
 -spec rebuild_channels([pos_integer()], guild_state()) -> guild_state().
 rebuild_channels(ChannelIds, State) ->
@@ -195,13 +185,6 @@ remove_user_all(UserId, State) ->
         engines(State)
     ),
     ok.
-
--spec member_index(list_id(), integer(), guild_state()) -> non_neg_integer() | not_found.
-member_index(ListId, UserId, State) ->
-    case ref(ListId, State) of
-        undefined -> not_found;
-        Ref -> guild_member_list_engine:index_of(Ref, UserId)
-    end.
 
 -spec set_hoisted_roles_all([integer()], guild_state()) -> boolean().
 set_hoisted_roles_all(HoistedRoleIds, State) ->
@@ -485,26 +468,6 @@ guild_id(State) ->
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
-
-is_engine_list_test() ->
-    Any = #{data => #{<<"guild">> => #{<<"features">> => []}}},
-    ?assertNot(is_engine_list(<<"0">>, Any)),
-    ?assert(is_engine_list(<<"123">>, Any)),
-    ?assertNot(is_engine_list(<<"notasnowflake">>, Any)).
-
-ref_reads_engine_map_test() ->
-    R = make_ref(),
-    State = #{
-        data => #{<<"guild">> => #{<<"features">> => []}},
-        channel_member_list_engines => #{<<"123">> => R}
-    },
-    ?assertEqual(R, ref(<<"123">>, State)),
-    ?assertEqual(undefined, ref(<<"456">>, State)).
-
-sync_online_noop_without_engines_test() ->
-    ?assertEqual(
-        ok, sync_online(1, true, #{data => #{<<"guild">> => #{<<"features">> => []}}})
-    ).
 
 memo_channel_state() ->
     #{

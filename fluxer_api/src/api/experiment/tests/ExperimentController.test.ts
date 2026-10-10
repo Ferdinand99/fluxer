@@ -2,7 +2,6 @@
 
 import {createTestAccount, setUserACLs} from '@app/api/auth/tests/AuthTestUtils';
 import {acceptInvite, createChannelInvite, createGuild, getChannel} from '@app/api/guild/tests/GuildTestUtils';
-import {ChannelThreadsConfigPublisher} from '@app/api/instance/ChannelThreadsConfigPublisher';
 import {getInstanceConfigRepository} from '@app/api/middleware/ServiceSingletons';
 import {type ApiTestHarness, createApiTestHarness} from '@app/api/test/ApiTestHarness';
 import {HTTP_STATUS} from '@app/api/test/TestConstants';
@@ -11,27 +10,39 @@ import {grantPremium} from '@app/api/user/tests/UserTestUtils';
 import {AdminACLs} from '@fluxer/constants/src/AdminACLs';
 import {UserPremiumTypes} from '@fluxer/constants/src/UserConstants';
 import {
-	applyChannelThreadsConfigUpdate,
-	type ChannelThreadsConfig,
-} from '@fluxer/schema/src/domains/admin/ChannelThreadsSchemas';
-import {
 	DEFAULT_DOMAIN_MIGRATION_CONFIG,
 	INERT_DOMAIN_MIGRATION_ASSIGNMENT,
 } from '@fluxer/schema/src/domains/admin/DomainMigrationSchemas';
-import {
-	DEFAULT_PLUTONIUM_PAGE_CONFIG,
-	INERT_PLUTONIUM_PAGE_ASSIGNMENT,
-} from '@fluxer/schema/src/domains/admin/PlutoniumPageSchemas';
+import {DEFAULT_VOICE_P2P_CONFIG, INERT_VOICE_P2P_ASSIGNMENT} from '@fluxer/schema/src/domains/admin/VoiceP2pSchemas';
 import {
 	DEFAULT_EXPERIMENT_POLL_INTERVAL_SECONDS,
 	DEFAULT_EXPERIMENT_POLL_JITTER_PERCENT,
 	type ExperimentAssignmentsResponse,
 	type ExperimentDeliveryConfigResponse,
-	readChannelThreadsAssignment,
 	readDomainMigrationAssignment,
-	readPlutoniumPageAssignment,
+	readVoiceP2pAssignment,
 } from '@fluxer/schema/src/domains/experiment/ExperimentSchemas';
-import {afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
+import type {GeoipResult} from '@pkgs/geoip/src/GeoipLookup';
+import {afterAll, beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
+
+const {lookupGeoipMock} = vi.hoisted(() => ({
+	lookupGeoipMock: vi.fn(),
+}));
+
+vi.mock('@app/api/utils/IpUtils', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@app/api/utils/IpUtils')>()),
+	lookupGeoip: lookupGeoipMock,
+}));
+
+function geoipCountry(countryCode: string | null): GeoipResult {
+	return {
+		countryCode,
+		normalizedIp: '203.0.113.10',
+		city: null,
+		region: null,
+		countryName: null,
+	};
+}
 
 const NOT_MODIFIED = 304;
 const ENDPOINT = '/experiments';
@@ -45,10 +56,8 @@ describe('GET /experiments', () => {
 
 	beforeEach(async () => {
 		await harness.reset();
-	});
-
-	afterEach(() => {
-		vi.restoreAllMocks();
+		lookupGeoipMock.mockReset();
+		lookupGeoipMock.mockResolvedValue(geoipCountry(null));
 	});
 
 	afterAll(async () => {
@@ -59,7 +68,7 @@ describe('GET /experiments', () => {
 		await createBuilderWithoutAuth(harness).get(ENDPOINT).expect(HTTP_STATUS.UNAUTHORIZED).execute();
 	});
 
-	it('returns the default delivery cadence and the inert assignment while the feature is disabled', async () => {
+	it('returns the default delivery cadence and the default assignments', async () => {
 		const account = await createTestAccount(harness);
 
 		const body = await createBuilder<ExperimentAssignmentsResponse>(harness, account.token).get(ENDPOINT).execute();
@@ -69,7 +78,9 @@ describe('GET /experiments', () => {
 			poll_jitter_percent: DEFAULT_EXPERIMENT_POLL_JITTER_PERCENT,
 			assignments: {
 				domain_migration: INERT_DOMAIN_MIGRATION_ASSIGNMENT,
-				plutonium_page: INERT_PLUTONIUM_PAGE_ASSIGNMENT,
+				channel_threads: {active: true, config_version: 0},
+				plutonium_page: {enabled: true},
+				voice_p2p: INERT_VOICE_P2P_ASSIGNMENT,
 			},
 		});
 	});
@@ -83,13 +94,13 @@ describe('GET /experiments', () => {
 		expect(readDomainMigrationAssignment(body).enabled).toBe(false);
 	});
 
-	it('populates the plutonium page assignment key even when the rollout is disabled', async () => {
+	it('populates the voice p2p assignment key even when the rollout is disabled', async () => {
 		const account = await createTestAccount(harness);
 
 		const body = await createBuilder<ExperimentAssignmentsResponse>(harness, account.token).get(ENDPOINT).execute();
 
-		expect(Object.hasOwn(body.assignments, 'plutonium_page')).toBe(true);
-		expect(readPlutoniumPageAssignment(body).enabled).toBe(false);
+		expect(Object.hasOwn(body.assignments, 'voice_p2p')).toBe(true);
+		expect(readVoiceP2pAssignment(body).enabled).toBe(false);
 	});
 
 	it('resolves the domain migration caller through the allowlist', async () => {
@@ -129,12 +140,12 @@ describe('GET /experiments', () => {
 		expect(body.assignments.domain_migration).toEqual({enabled: false});
 	});
 
-	it('resolves the plutonium page caller through the allowlist and the exclusion list', async () => {
+	it('resolves the voice p2p caller through the allowlist and the exclusion list', async () => {
 		const targeted = await createTestAccount(harness);
 		const untargeted = await createTestAccount(harness);
 		const excluded = await createTestAccount(harness);
-		await getInstanceConfigRepository().setPlutoniumPageConfig({
-			...DEFAULT_PLUTONIUM_PAGE_CONFIG,
+		await getInstanceConfigRepository().setVoiceP2pConfig({
+			...DEFAULT_VOICE_P2P_CONFIG,
 			enabled: true,
 			rollout_basis_points: 0,
 			included_user_ids: [targeted.userId, excluded.userId],
@@ -144,36 +155,47 @@ describe('GET /experiments', () => {
 		const targetedBody = await createBuilder<ExperimentAssignmentsResponse>(harness, targeted.token)
 			.get(ENDPOINT)
 			.execute();
-		expect(targetedBody.assignments.plutonium_page).toEqual({enabled: true});
+		expect(targetedBody.assignments.voice_p2p).toEqual({enabled: true, max_participants: 2});
 
 		const untargetedBody = await createBuilder<ExperimentAssignmentsResponse>(harness, untargeted.token)
 			.get(ENDPOINT)
 			.execute();
-		expect(untargetedBody.assignments.plutonium_page).toEqual({enabled: false});
+		expect(untargetedBody.assignments.voice_p2p).toEqual({enabled: false, max_participants: 2});
 
 		const excludedBody = await createBuilder<ExperimentAssignmentsResponse>(harness, excluded.token)
 			.get(ENDPOINT)
 			.execute();
-		expect(excludedBody.assignments.plutonium_page).toEqual({enabled: false});
+		expect(excludedBody.assignments.voice_p2p).toEqual({enabled: false, max_participants: 2});
 	});
 
-	it('keeps the plutonium page exclusion ahead of a full rollout', async () => {
-		const excluded = await createTestAccount(harness);
-		const other = await createTestAccount(harness);
-		await getInstanceConfigRepository().setPlutoniumPageConfig({
-			...DEFAULT_PLUTONIUM_PAGE_CONFIG,
-			enabled: true,
-			rollout_basis_points: 10000,
-			excluded_user_ids: [excluded.userId],
+	it('limits the percentage rollout of every experiment to the listed request countries', async () => {
+		const account = await createTestAccount(harness);
+		const included = await createTestAccount(harness);
+		const repository = getInstanceConfigRepository();
+		const rollout = {enabled: true, rollout_basis_points: 10000, rollout_country_codes: ['SE', 'NO']};
+		await repository.setDomainMigrationConfig({...DEFAULT_DOMAIN_MIGRATION_CONFIG, ...rollout});
+		await repository.setVoiceP2pConfig({
+			...DEFAULT_VOICE_P2P_CONFIG,
+			...rollout,
+			included_user_ids: [included.userId],
 		});
 
-		const excludedBody = await createBuilder<ExperimentAssignmentsResponse>(harness, excluded.token)
+		for (const [countryCode, expected] of [
+			['SE', true],
+			['BR', false],
+			[null, false],
+		] as const) {
+			lookupGeoipMock.mockResolvedValue(geoipCountry(countryCode));
+			const body = await createBuilder<ExperimentAssignmentsResponse>(harness, account.token).get(ENDPOINT).execute();
+			expect(body.assignments.domain_migration).toEqual({enabled: expected});
+			expect(body.assignments.voice_p2p).toEqual({enabled: expected, max_participants: 2});
+		}
+
+		lookupGeoipMock.mockResolvedValue(geoipCountry('BR'));
+		const includedBody = await createBuilder<ExperimentAssignmentsResponse>(harness, included.token)
 			.get(ENDPOINT)
 			.execute();
-		expect(excludedBody.assignments.plutonium_page).toEqual({enabled: false});
-
-		const otherBody = await createBuilder<ExperimentAssignmentsResponse>(harness, other.token).get(ENDPOINT).execute();
-		expect(otherBody.assignments.plutonium_page).toEqual({enabled: true});
+		expect(includedBody.assignments.voice_p2p).toEqual({enabled: true, max_participants: 2});
 	});
 
 	it('enrols members of an included guild in every experiment and leaves everyone else out', async () => {
@@ -190,8 +212,8 @@ describe('GET /experiments', () => {
 			enabled: true,
 			included_guild_ids: [guild.id],
 		});
-		await repository.setPlutoniumPageConfig({
-			...DEFAULT_PLUTONIUM_PAGE_CONFIG,
+		await repository.setVoiceP2pConfig({
+			...DEFAULT_VOICE_P2P_CONFIG,
 			enabled: true,
 			included_guild_ids: [guild.id],
 		});
@@ -200,13 +222,13 @@ describe('GET /experiments', () => {
 			.get(ENDPOINT)
 			.execute();
 		expect(memberBody.assignments.domain_migration).toEqual({enabled: true});
-		expect(memberBody.assignments.plutonium_page).toEqual({enabled: true});
+		expect(memberBody.assignments.voice_p2p).toEqual({enabled: true, max_participants: 2});
 
 		const outsiderBody = await createBuilder<ExperimentAssignmentsResponse>(harness, outsider.token)
 			.get(ENDPOINT)
 			.execute();
 		expect(outsiderBody.assignments.domain_migration).toEqual({enabled: false});
-		expect(outsiderBody.assignments.plutonium_page).toEqual({enabled: false});
+		expect(outsiderBody.assignments.voice_p2p).toEqual({enabled: false, max_participants: 2});
 	});
 
 	it('enrols premium users, subscription and lifetime alike, when the switch is on', async () => {
@@ -221,8 +243,8 @@ describe('GET /experiments', () => {
 			enabled: true,
 			include_premium_users: true,
 		});
-		await repository.setPlutoniumPageConfig({
-			...DEFAULT_PLUTONIUM_PAGE_CONFIG,
+		await repository.setVoiceP2pConfig({
+			...DEFAULT_VOICE_P2P_CONFIG,
 			enabled: true,
 			include_premium_users: true,
 		});
@@ -233,30 +255,63 @@ describe('GET /experiments', () => {
 		] as const) {
 			const body = await createBuilder<ExperimentAssignmentsResponse>(harness, account.token).get(ENDPOINT).execute();
 			expect(body.assignments.domain_migration).toEqual({enabled: expected});
-			expect(body.assignments.plutonium_page).toEqual({enabled: expected});
+			expect(body.assignments.voice_p2p).toEqual({enabled: expected, max_participants: 2});
 		}
 	});
 
-	it('stores the guild ids and premium switch an admin sets for each experiment', async () => {
+	it('stores the guild ids, countries and premium switch an admin sets for each experiment', async () => {
 		const admin = await setUserACLs(harness, await createTestAccount(harness), [
 			AdminACLs.AUTHENTICATE,
 			AdminACLs.INSTANCE_CONFIG_VIEW,
 			AdminACLs.INSTANCE_CONFIG_UPDATE,
 		]);
 		const guildIds = ['1500000000000000001', '1500000000000000002'];
+		const countryCodes = ['SE', 'NO'];
+		const section = {included_guild_ids: guildIds, include_premium_users: true, rollout_country_codes: countryCodes};
 		const body = await createBuilder<
-			Record<'domain_migration' | 'plutonium_page', {included_guild_ids: Array<string>; include_premium_users: boolean}>
+			Record<
+				'domain_migration' | 'voice_p2p',
+				{included_guild_ids: Array<string>; include_premium_users: boolean; rollout_country_codes: Array<string>}
+			>
 		>(harness, admin.token)
 			.patch('/admin/instance/config')
-			.body({
-				domain_migration: {included_guild_ids: guildIds, include_premium_users: true},
-				plutonium_page: {included_guild_ids: guildIds, include_premium_users: true},
-			})
+			.body({domain_migration: section, voice_p2p: section})
 			.execute();
-		for (const section of [body.domain_migration, body.plutonium_page]) {
-			expect(section.included_guild_ids).toEqual(guildIds);
-			expect(section.include_premium_users).toBe(true);
+		for (const stored of [body.domain_migration, body.voice_p2p]) {
+			expect(stored.included_guild_ids).toEqual(guildIds);
+			expect(stored.include_premium_users).toBe(true);
+			expect(stored.rollout_country_codes).toEqual(countryCodes);
 		}
+	});
+
+	it.each([
+		{name: 'lowercase', countryCodes: ['se']},
+		{name: 'duplicated', countryCodes: ['SE', 'SE']},
+		{name: 'malformed', countryCodes: ['SWE']},
+	])('rejects $name rollout country codes from an admin', async ({countryCodes}) => {
+		const admin = await setUserACLs(harness, await createTestAccount(harness), [
+			AdminACLs.AUTHENTICATE,
+			AdminACLs.INSTANCE_CONFIG_VIEW,
+			AdminACLs.INSTANCE_CONFIG_UPDATE,
+		]);
+		await createBuilder(harness, admin.token)
+			.patch('/admin/instance/config')
+			.body({voice_p2p: {rollout_country_codes: countryCodes}})
+			.expect(HTTP_STATUS.BAD_REQUEST)
+			.execute();
+	});
+
+	it.each([1, 5])('rejects a voice p2p max_participants of %i from an admin', async (maxParticipants) => {
+		const admin = await setUserACLs(harness, await createTestAccount(harness), [
+			AdminACLs.AUTHENTICATE,
+			AdminACLs.INSTANCE_CONFIG_VIEW,
+			AdminACLs.INSTANCE_CONFIG_UPDATE,
+		]);
+		await createBuilder(harness, admin.token)
+			.patch('/admin/instance/config')
+			.body({voice_p2p: {max_participants: maxParticipants}})
+			.expect(HTTP_STATUS.BAD_REQUEST)
+			.execute();
 	});
 
 	it('revalidates with a strong etag and answers 304 when nothing changed', async () => {
@@ -411,38 +466,38 @@ describe('GET /experiments', () => {
 		expect(afterUndefined.domain_migration).toMatchObject({config_version: 1, enabled: true});
 	});
 
-	it('bumps the plutonium page config version on every admin update without the client sending one', async () => {
+	it('bumps the voice p2p config version on every admin update without the client sending one', async () => {
 		const admin = await setUserACLs(harness, await createTestAccount(harness), [
 			AdminACLs.AUTHENTICATE,
 			AdminACLs.INSTANCE_CONFIG_VIEW,
 			AdminACLs.INSTANCE_CONFIG_UPDATE,
 		]);
 
-		const afterFirst = await createBuilder<{plutonium_page: {config_version: number; enabled: boolean}}>(
+		const afterFirst = await createBuilder<{voice_p2p: {config_version: number; enabled: boolean}}>(
 			harness,
 			admin.token,
 		)
 			.patch('/admin/instance/config')
-			.body({plutonium_page: {enabled: true, included_user_ids: [admin.userId]}})
+			.body({voice_p2p: {enabled: true, included_user_ids: [admin.userId]}})
 			.execute();
-		expect(afterFirst.plutonium_page).toMatchObject({config_version: 1, enabled: true});
+		expect(afterFirst.voice_p2p).toMatchObject({config_version: 1, enabled: true});
 
 		const afterSecond = await createBuilder<{
-			plutonium_page: {config_version: number; rollout_basis_points: number};
+			voice_p2p: {config_version: number; rollout_basis_points: number};
 		}>(harness, admin.token)
 			.patch('/admin/instance/config')
-			.body({plutonium_page: {rollout_basis_points: 2500}})
+			.body({voice_p2p: {rollout_basis_points: 2500, max_participants: 4}})
 			.execute();
-		expect(afterSecond.plutonium_page).toMatchObject({config_version: 2, rollout_basis_points: 2500});
+		expect(afterSecond.voice_p2p).toMatchObject({config_version: 2, rollout_basis_points: 2500, max_participants: 4});
 
-		const afterEmpty = await createBuilder<{plutonium_page: {config_version: number}}>(harness, admin.token)
+		const afterEmpty = await createBuilder<{voice_p2p: {config_version: number}}>(harness, admin.token)
 			.patch('/admin/instance/config')
-			.body({plutonium_page: {}})
+			.body({voice_p2p: {}})
 			.execute();
-		expect(afterEmpty.plutonium_page).toMatchObject({config_version: 2});
+		expect(afterEmpty.voice_p2p).toMatchObject({config_version: 2});
 
 		const body = await createBuilder<ExperimentAssignmentsResponse>(harness, admin.token).get(ENDPOINT).execute();
-		expect(body.assignments.plutonium_page).toEqual({enabled: true});
+		expect(body.assignments.voice_p2p).toEqual({enabled: true, max_participants: 4});
 	});
 
 	it('serves the delivery cadence an admin set through the instance config', async () => {
@@ -464,69 +519,5 @@ describe('GET /experiments', () => {
 		const body = await createBuilder<ExperimentAssignmentsResponse>(harness, admin.token).get(ENDPOINT).execute();
 		expect(body.poll_interval_seconds).toBe(3600);
 		expect(body.poll_jitter_percent).toBe(DEFAULT_EXPERIMENT_POLL_JITTER_PERCENT);
-	});
-
-	it('keeps the control body and etag for a user outside the channel threads experiment', async () => {
-		const account = await createTestAccount(harness);
-		const before = await createBuilder<ExperimentAssignmentsResponse>(harness, account.token)
-			.get(ENDPOINT)
-			.executeWithResponse();
-
-		await getInstanceConfigRepository().updateChannelThreadsConfig((current) =>
-			applyChannelThreadsConfigUpdate(current, {enabled: true, included_user_ids: ['1']}),
-		);
-		const after = await createBuilder<ExperimentAssignmentsResponse>(harness, account.token)
-			.get(ENDPOINT)
-			.executeWithResponse();
-
-		expect(Object.hasOwn(after.json.assignments, 'channel_threads')).toBe(false);
-		expect(readChannelThreadsAssignment(after.json)).toBeNull();
-		expect(after.response.headers.get('etag')).toBe(before.response.headers.get('etag'));
-	});
-
-	it('assigns channel threads to an included user with the config version', async () => {
-		const account = await createTestAccount(harness);
-		await getInstanceConfigRepository().updateChannelThreadsConfig((current) =>
-			applyChannelThreadsConfigUpdate(current, {enabled: true, included_user_ids: [account.userId]}),
-		);
-
-		const body = await createBuilder<ExperimentAssignmentsResponse>(harness, account.token).get(ENDPOINT).execute();
-
-		expect(readChannelThreadsAssignment(body)).toEqual({active: true, config_version: 1});
-	});
-
-	it('bumps the channel threads version, keeps ever_enabled sticky and publishes every admin update', async () => {
-		const publish = vi.spyOn(ChannelThreadsConfigPublisher.prototype, 'publish').mockResolvedValue(undefined);
-		const admin = await setUserACLs(harness, await createTestAccount(harness), [
-			AdminACLs.AUTHENTICATE,
-			AdminACLs.INSTANCE_CONFIG_VIEW,
-			AdminACLs.INSTANCE_CONFIG_UPDATE,
-		]);
-		const patch = (body: Record<string, unknown>) =>
-			createBuilder<{channel_threads: ChannelThreadsConfig}>(harness, admin.token)
-				.patch('/admin/instance/config')
-				.body({channel_threads: body})
-				.execute();
-
-		const initial = await createBuilder<{channel_threads: ChannelThreadsConfig}>(harness, admin.token)
-			.get('/admin/instance/config')
-			.execute();
-		expect(initial.channel_threads).toMatchObject({enabled: false, config_version: 0, ever_enabled: false});
-
-		const enabled = await patch({enabled: true, included_user_ids: [admin.userId], ever_enabled: false});
-		expect(enabled.channel_threads).toMatchObject({enabled: true, config_version: 1, ever_enabled: true});
-
-		const disabled = await patch({enabled: false, config_version: 99});
-		expect(disabled.channel_threads).toMatchObject({enabled: false, config_version: 2, ever_enabled: true});
-
-		const unchanged = await patch({});
-		expect(unchanged.channel_threads.config_version).toBe(2);
-
-		expect(publish.mock.calls.map(([config]) => [config.config_version, config.enabled])).toEqual([
-			[1, true],
-			[2, false],
-		]);
-		const body = await createBuilder<ExperimentAssignmentsResponse>(harness, admin.token).get(ENDPOINT).execute();
-		expect(readChannelThreadsAssignment(body)).toBeNull();
 	});
 });

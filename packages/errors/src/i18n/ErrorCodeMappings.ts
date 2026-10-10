@@ -72,7 +72,6 @@ export const ErrorCodeToI18nKey = {
 	[APIErrorCodes.CANNOT_SEND_MESSAGES_IN_NON_TEXT_CHANNEL]: 'misc.cannot_send_messages_in_non_text_channel',
 	[APIErrorCodes.CANNOT_SEND_MESSAGES_TO_USER]: 'friends_and_dms.cannot_send_messages_to_user',
 	[APIErrorCodes.CANNOT_TRANSFER_OWNERSHIP_TO_BOT]: 'channels_and_guilds.cannot_transfer_ownership_to_bot',
-	[APIErrorCodes.CANNOT_SHRINK_RESERVED_SLOTS]: 'limits.cannot_shrink_reserved_slots',
 	[APIErrorCodes.CAPTCHA_REQUIRED]: 'captcha.required',
 	[APIErrorCodes.COMMUNICATION_DISABLED]: 'account.communication_disabled',
 	[APIErrorCodes.CONNECTION_ALREADY_EXISTS]: 'connections.already_exists',
@@ -150,6 +149,7 @@ export const ErrorCodeToI18nKey = {
 	[APIErrorCodes.INVALID_PASSKEY_BRIDGE_NONCE]: 'auth_and_oauth.passkey_bridge_nonce_invalid',
 	[APIErrorCodes.INVALID_PERMISSIONS_INTEGER]: 'misc.invalid_permissions_integer',
 	[APIErrorCodes.INVALID_PERMISSIONS_NEGATIVE]: 'misc.invalid_permissions_negative',
+	[APIErrorCodes.INVALID_REPORT_FLOW_ANSWERS]: 'moderation_and_reports.invalid_report_flow_answers',
 	[ValidationErrorCodes.INVALID_PASSWORD]: 'email.invalid_or_password',
 	[ValidationErrorCodes.INVALID_MFA_CODE]: 'mfa_and_passkeys.invalid_mfa_code',
 	[ValidationErrorCodes.INVALID_SSO_AUTHORIZATION_CODE]: 'auth_and_oauth.invalid_sso_authorization_code',
@@ -196,6 +196,7 @@ export const ErrorCodeToI18nKey = {
 	[APIErrorCodes.MAX_FAVORITE_MEMES]: 'media_and_memes.max_favorite_memes_reached',
 	[APIErrorCodes.MAX_FRIENDS]: 'misc_limits.max_friends_reached',
 	[APIErrorCodes.GROUP_DM_RECIPIENTS_NOT_ADDABLE]: 'channels_and_guilds.group_dm_recipients_not_addable',
+	[APIErrorCodes.GROUP_DM_MATURE_CONTENT_INELIGIBLE]: 'channels_and_guilds.group_dm_mature_content_ineligible',
 	[APIErrorCodes.MAX_GROUP_DM_RECIPIENTS]: 'channels_and_guilds.max_group_dm_recipients_reached',
 	[APIErrorCodes.MAX_GROUP_DMS]: 'channels_and_guilds.max_group_dms_reached',
 	[APIErrorCodes.MAX_GUILD_CHANNELS]: 'channels_and_guilds.max_guild_channels_reached',
@@ -207,8 +208,6 @@ export const ErrorCodeToI18nKey = {
 	[APIErrorCodes.MAX_STICKERS]: 'stickers_and_emojis.max_stickers_reached',
 	[APIErrorCodes.MAX_WEBHOOKS_PER_CHANNEL]: 'webhooks.max_webhooks_per_channel_reached',
 	[APIErrorCodes.MAX_WEBHOOKS_PER_GUILD]: 'webhooks.max_webhooks_per_guild_reached',
-	[APIErrorCodes.NCMEC_ALREADY_SUBMITTED]: 'content_and_safety.ncmec_already_submitted',
-	[APIErrorCodes.NCMEC_SUBMISSION_FAILED]: 'content_and_safety.ncmec_submission_failed',
 	[APIErrorCodes.MEDIA_METADATA_ERROR]: 'media_and_memes.media_metadata_error',
 	[APIErrorCodes.METHOD_NOT_ALLOWED]: 'http.method_not_allowed',
 	[ValidationErrorCodes.MEDIA_ALREADY_IN_FAVORITE_MEMES]: 'media_and_memes.media_already_in_favorites',
@@ -239,6 +238,8 @@ export const ErrorCodeToI18nKey = {
 	[APIErrorCodes.REGISTRATION_URL_INVALID]: 'auth_and_oauth.registration_url_invalid',
 	[APIErrorCodes.REPORT_ALREADY_RESOLVED]: 'moderation_and_reports.report_already_resolved',
 	[APIErrorCodes.REPORT_BANNED]: 'moderation_and_reports.report_banned',
+	[APIErrorCodes.REPORT_FLOW_OUTDATED]: 'moderation_and_reports.report_flow_outdated',
+	[APIErrorCodes.REPORT_UNDER_LEGAL_HOLD]: 'moderation_and_reports.report_under_legal_hold',
 	[APIErrorCodes.RESPONSE_VALIDATION_ERROR]: 'admin_and_system.response_validation_failed',
 	[APIErrorCodes.RESOURCE_LOCKED]: 'admin_and_system.resource_locked',
 	[APIErrorCodes.SERVICE_UNAVAILABLE]: 'http.service_unavailable',
@@ -373,9 +374,6 @@ export const ErrorCodeToI18nKey = {
 	[ValidationErrorCodes.NO_FILE_FOR_ATTACHMENT_METADATA]:
 		'attachments_and_uploads.no_file_uploaded_for_attachment_metadata',
 	[ValidationErrorCodes.NO_UPLOADED_PARTS_TO_FINALIZE]: 'attachments_and_uploads.no_uploaded_parts_to_finalize',
-	[ValidationErrorCodes.ATTACHMENT_FIELDS_REQUIRED]: 'attachments_and_uploads.attachment_fields_required',
-	[ValidationErrorCodes.ATTACHMENT_IDS_MUST_BE_VALID_INTEGERS]:
-		'attachments_and_uploads.attachment_ids_must_be_valid_integers',
 	[ValidationErrorCodes.ATTACHMENTS_NOT_ALLOWED_FOR_MESSAGE]:
 		'attachments_and_uploads.attachments_not_allowed_for_message',
 	[ValidationErrorCodes.DUPLICATE_ATTACHMENT_IDS_NOT_ALLOWED]:
@@ -396,7 +394,6 @@ export const ErrorCodeToI18nKey = {
 	[ValidationErrorCodes.MULTIPLE_FILES_FOR_INDEX_NOT_ALLOWED]:
 		'attachments_and_uploads.multiple_files_for_index_not_allowed',
 	[ValidationErrorCodes.NO_VALID_MEDIA_IN_MESSAGE]: 'attachments_and_uploads.no_valid_media_in_message',
-	[ValidationErrorCodes.SIZE_BYTES_MUST_BE_VALID_INTEGER]: 'attachments_and_uploads.size_bytes_must_be_valid_integer',
 	[ValidationErrorCodes.TOO_MANY_FILES]: 'attachments_and_uploads.too_many_files',
 	[ValidationErrorCodes.UNRESOLVED_ATTACHMENT_URL]: 'attachments_and_uploads.unresolved_attachment_url',
 	[ValidationErrorCodes.UPLOADED_ATTACHMENT_NOT_FOUND]: 'attachments_and_uploads.uploaded_attachment_not_found',
@@ -432,9 +429,9 @@ export const ErrorCodeToI18nKey = {
 	[ValidationErrorCodes.VISIONARY_REQUIRED_FOR_DISCRIMINATOR]: 'premium_and_plans.visionary_required_for_discriminator',
 	[ValidationErrorCodes.BOT_DISCRIMINATOR_CANNOT_BE_CHANGED]: 'bots.bot_discriminator_cannot_be_changed',
 	[ValidationErrorCodes.BOT_SEARCH_SCOPE_UNAVAILABLE]: 'bots.search_scope_unavailable',
+	[ValidationErrorCodes.USER_MUST_BE_A_BOT_TO_BE_MARKED_AS_A_SYSTEM_USER]:
+		'admin_and_system.user_must_be_bot_for_system_user',
 	[ValidationErrorCodes.USER_IS_NOT_BANNED]: 'moderation_and_reports.user_is_not_banned',
-	[ValidationErrorCodes.NCMEC_ATTACHMENT_MUST_BE_IMAGE_OR_VIDEO]:
-		'moderation_and_reports.ncmec_attachment_must_be_image_or_video',
 	[ValidationErrorCodes.EMAIL_ALREADY_IN_USE]: 'email.email_already_in_use',
 	[ValidationErrorCodes.EMAIL_IS_REQUIRED]: 'email.email_required',
 	[ValidationErrorCodes.EMAIL_LENGTH_INVALID]: 'email.length_invalid',
@@ -537,7 +534,6 @@ export const ErrorCodeToI18nKey = {
 	[ValidationErrorCodes.VANITY_URL_INVALID_CHARACTERS]: 'vanity_urls.vanity_url_invalid_characters',
 	[ValidationErrorCodes.WEBHOOK_NAME_LENGTH_INVALID]: 'webhooks.webhook_name_length_invalid',
 	[ValidationErrorCodes.AT_LEAST_ONE_ENTRY_IS_REQUIRED]: 'limits.at_least_one_entry_required',
-	[ValidationErrorCodes.BUCKET_IS_REQUIRED]: 'limits.bucket_required',
 	[ValidationErrorCodes.CANNOT_PRELOAD_MORE_THAN_100_CHANNELS]: 'messages.cannot_preload_more_than_100_channels',
 	[ValidationErrorCodes.INTEGER_OUT_OF_INT64_RANGE]: 'limits.integer_out_of_int64_range',
 	[ValidationErrorCodes.INVALID_AUDIT_LOG_REASON]: 'admin_and_system.invalid_audit_log_reason',
@@ -557,7 +553,6 @@ export const ErrorCodeToI18nKey = {
 		'mfa_and_passkeys.must_enable_2fa_before_enforcing_for_mods',
 	[ValidationErrorCodes.TOTP_NOT_ENABLED]: 'mfa_and_passkeys.totp_not_enabled',
 	[ValidationErrorCodes.NAME_EMPTY_AFTER_NORMALIZATION]: 'names_and_normalization.name_empty_after_normalization',
-	[ValidationErrorCodes.ROWS_IS_REQUIRED]: 'limits.rows_required',
 	[ValidationErrorCodes.SNOWFLAKE_OUT_OF_RANGE]: 'misc.invalid_snowflake',
 	[ValidationErrorCodes.STRING_LENGTH_EXACT]: 'limits.string_length_exact',
 	[ValidationErrorCodes.TICKET_ALREADY_COMPLETED]: 'tickets.ticket_already_completed',

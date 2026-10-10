@@ -9,6 +9,7 @@ import {
 	WINDOWS_APP_USER_MODEL_ID,
 	WINDOWS_TOAST_ACTIVATOR_CLSID,
 } from '@electron/common/DesktopIdentity';
+import {writeLogFilesUnder} from '@electron/common/Logger';
 import {configureUserDataPath} from '@electron/common/UserDataPath';
 import {
 	APP_STORE_ADDON_PACKAGE,
@@ -58,6 +59,7 @@ import {
 import {recordDesktopLastRoute} from '@electron/main/DesktopLastRoute';
 import {cleanupDesktopOutboundHTTP} from '@electron/main/DesktopOutboundHTTP';
 import {registerDesktopRuntimeConfigHandlers} from '@electron/main/DesktopRuntimeConfigIpc';
+import {installDesktopSystemTrustVerifier} from '@electron/main/DesktopSystemTrustVerifier';
 import {destroyDesktopTray, hasActiveDesktopTray, initializeDesktopTray} from '@electron/main/DesktopTray';
 import {registerDisplayMediaHandlers} from '@electron/main/DisplayMedia';
 import {initializeDockMenu} from '@electron/main/DockMenu';
@@ -82,6 +84,7 @@ import {createApplicationMenu} from '@electron/main/Menu';
 import {
 	armOpenUrlForwarding,
 	armSecondInstanceForwarding,
+	setMainWindowFactory,
 	setOpenUrlSink,
 	setSecondInstanceSink,
 } from '@electron/main/ModuleBootHandoff';
@@ -92,7 +95,6 @@ import {
 } from '@electron/main/NativeHardwareEncoder';
 import {type NativeModulePreflightResult, runNativeModulePreflight} from '@electron/main/NativeModulePreflight';
 import {armNativeProbeCache} from '@electron/main/NativeProbeCache';
-import {cleanupNativeScreenCapture, registerNativeScreenCaptureHandlers} from '@electron/main/NativeScreenCapture';
 import {applyPreReadyChromiumConfiguration} from '@electron/main/PreReadyChromium';
 import {cleanupLinuxChromiumSpellcheckDictionaries} from '@electron/main/Spellcheck';
 import {
@@ -100,6 +102,7 @@ import {
 	createWindow,
 	getMainWindow,
 	hideWindow,
+	isMainWindowTakenOver,
 	setQuitting,
 	showWindow,
 } from '@electron/main/Window';
@@ -117,7 +120,7 @@ import {
 	DesktopLegacyImportPhase,
 	readDesktopLegacyImportPhase,
 } from '@fluxer/desktop_ipc/src/StorageContract';
-import {app, dialog, ipcMain, netLog, shell} from 'electron';
+import {app, dialog, ipcMain, netLog, session, shell} from 'electron';
 import log from 'electron-log';
 
 log.transports.file.level = 'info';
@@ -148,8 +151,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const userDataConfig = configureUserDataPath();
 if (userDataConfig.portable) {
-	const portableLogsPath = app.getPath('logs');
-	log.transports.file.resolvePathFn = (variables) => path.join(portableLogsPath, variables.fileName ?? 'main.log');
+	writeLogFilesUnder(app.getPath('logs'));
 }
 armNativeProbeCache(userDataConfig.base);
 const processConfiguredAt = Date.now();
@@ -374,6 +376,7 @@ if (launchConfigurationError) {
 		});
 		armSecondInstanceForwarding();
 		setSecondInstanceSink(handleSecondInstance);
+		setMainWindowFactory(() => createWindow());
 		app.on('child-process-gone', (_event, details) => {
 			log.error('Child process gone', details);
 		});
@@ -392,6 +395,11 @@ if (launchConfigurationError) {
 					log.error('[Init] Failed to configure the host resolver:', error);
 				}
 				await runStartupPhaseAsync('launch-net-log', startLaunchNetLog);
+				try {
+					runStartupPhase('system-trust', () => installDesktopSystemTrustVerifier(session.defaultSession));
+				} catch (error) {
+					log.error('[Init] Failed to install the system trust verifier:', error);
+				}
 				try {
 					await runStartupPhaseAsync('desktop-debug-info', async () => {
 						logDesktopDebugInfo(await getDesktopDebugInfo(userDataConfig.base, {nativeProbes: false}));
@@ -531,11 +539,6 @@ if (launchConfigurationError) {
 					log.error('[Init] Failed to remove the legacy Squirrel uninstall entry:', error);
 				}
 				try {
-					runStartupPhase('native-screen-capture-handlers', registerNativeScreenCaptureHandlers);
-				} catch (error: unknown) {
-					log.error('[Init] Failed to register native screen capture handlers:', error);
-				}
-				try {
 					runStartupPhase('native-hardware-encoder-handlers', registerNativeHardwareEncoderHandlers);
 				} catch (error: unknown) {
 					log.error('[Init] Failed to register native hardware encoder handlers:', error);
@@ -591,6 +594,7 @@ if (launchConfigurationError) {
 					initializeDesktopTray({
 						createWindow,
 						getMainWindow,
+						isMainWindowTakenOver,
 						hideWindow,
 						setQuitting,
 						showWindow,
@@ -602,7 +606,7 @@ if (launchConfigurationError) {
 				}
 				app.on('activate', () => {
 					const mainWindow = getMainWindow();
-					if (mainWindow === null || mainWindow.isDestroyed()) {
+					if ((mainWindow === null || mainWindow.isDestroyed()) && !isMainWindowTakenOver()) {
 						createWindow();
 					} else {
 						showWindow();
@@ -617,6 +621,10 @@ if (launchConfigurationError) {
 		app.on('window-all-closed', () => {
 			if (startupWindowsPending) {
 				log.info('[Shutdown] All windows closed before startup created the main window, keeping app alive');
+				return;
+			}
+			if (isMainWindowTakenOver()) {
+				log.info('[Shutdown] The update splash closed mid update, keeping app alive to reopen the main window');
 				return;
 			}
 			const settings = getDesktopWindowBehaviorSettings();
@@ -677,7 +685,6 @@ if (launchConfigurationError) {
 			cleanupIpcHandlers({quitting: true});
 			cleanupGlobalShortcuts();
 			cleanupNativeAudio();
-			cleanupNativeScreenCapture();
 			cleanupNativeHardwareEncoderHandlers();
 			cleanupVirtmic();
 			destroyDesktopTray();
