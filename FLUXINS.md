@@ -27,8 +27,9 @@ The desktop client follows upstream's architecture:
   `fluxer_desktop/src/main/ShellDownloadFormats.ts`), the `package-origin` branch served through
   raw.githubusercontent.com. GitHub Pages is disabled on forks of this repository, so Pages is not used.
 - **Shell updates**: Windows installs update through Velopack from this repository's GitHub releases
-  (`VELOPACK_UPDATE_SOURCE`, keep it the plain repository URL). macOS builds are unsigned and fall back
-  to the download page (`MAC_SELF_UPDATE_ENABLED` in `ShellUpdateCapability.ts`).
+  (`VELOPACK_UPDATE_SOURCE`, keep it the plain repository URL). macOS updates itself through Squirrel.Mac
+  from `darwin/arm64/RELEASES.json` on the package origin (`MAC_SELF_UPDATE_ENABLED` in
+  `ShellUpdateCapability.ts`). This only works while every release is signed with the same certificate.
 - **Release pipeline**: `.github/workflows/release-fluxins.yaml`, unsigned and limited to Windows x64 and
   macOS arm64.
 - **CI**: `.github/workflows/tests.yaml` only runs the jobs that matter for the client. Upstream's
