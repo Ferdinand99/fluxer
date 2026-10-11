@@ -532,6 +532,19 @@ jobs:
           set -euo pipefail
           repo="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           # modules.json is replaced on every release, so the branch is rewritten as a single commit.
+          # Squirrel.Mac update feed: the app reads desktop/stable/darwin/arm64/RELEASES.json and downloads the
+          # signed zip from this release.
+          zip_file="$(ls release-files/*-mac-arm64.zip | head -n 1)"
+          feed_dir=payload_tree/desktop/stable/darwin/arm64
+          mkdir -p "$feed_dir"
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$PUB_DATE" \
+            --arg url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/$(basename "$zip_file")" \
+            '{currentRelease: $version, releases: [{version: $version, updateTo: {version: $version, pub_date: $pub_date, notes: "", name: $version, url: $url}}]}' \
+            > "$feed_dir/RELEASES.json"
+          cp "$feed_dir/RELEASES.json" "$feed_dir/releases.json"
+          cat "$feed_dir/RELEASES.json"
           rm -rf pages
           mkdir -p pages/desktop
           cp -a payload_tree/desktop/. pages/desktop/

@@ -24,9 +24,10 @@ export type ShellUpdatePlan =
 	| {readonly capability: typeof ShellUpdateCapability.MANUAL_DOWNLOAD; readonly reason: 'platform' | 'unpackaged'}
 	| {readonly capability: typeof ShellUpdateCapability.MANAGED_PACKAGE};
 
-// macOS self-update (Squirrel.Mac) needs a Developer ID signature, which Fluxins builds do not have.
-// They fall back to the manual download page until signing is set up.
-const MAC_SELF_UPDATE_ENABLED = false;
+// macOS self-update (Squirrel.Mac) requires every release to be signed with the same identity as the installed
+// app. The release workflow does this with the MAC_LOCAL_SIGNING certificate and publishes
+// darwin/arm64/RELEASES.json to the package origin. Set this back to false if releases are ad-hoc signed again.
+const MAC_SELF_UPDATE_ENABLED = true;
 
 interface ShellUpdateRuntime {
 	readonly channel: BuildChannel;
