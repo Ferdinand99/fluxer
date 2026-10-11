@@ -56,6 +56,11 @@ const CHANNELS = {
 // Developer ID signing and notarisation are only used when a signing certificate is provided
 // (CSC_LINK / CSC_NAME / CSC_KEYCHAIN). Otherwise macOS builds are ad-hoc signed.
 const macSigningEnabled = Boolean(process.env.CSC_LINK || process.env.CSC_NAME || process.env.CSC_KEYCHAIN);
+// MAC_LOCAL_SIGNING=true signs with a non-Developer-ID identity (for example an "Apple Development" or
+// self-signed certificate selected through CSC_NAME). The signature is stable across builds, so macOS keeps
+// camera, microphone and screen recording grants, but it cannot be notarised and cannot use the upstream
+// provisioning profile or restricted entitlements, so those are skipped.
+const macLocalSigning = macSigningEnabled && process.env.MAC_LOCAL_SIGNING === 'true';
 const buildChannel = process.env.BUILD_CHANNEL || 'stable';
 const channel = CHANNELS[buildChannel];
 
@@ -1741,21 +1746,27 @@ module.exports = {
 		minimumSystemVersion: macOSMinimumSystemVersion,
 		icon: `build_resources/${iconDir}/_compiled/AppIcon.icns`,
 		darkModeSupport: true,
-		notarize: macSigningEnabled && channel.notarize,
-		sign: macSigningEnabled
+		notarize: macSigningEnabled && !macLocalSigning && channel.notarize,
+		sign: macLocalSigning
 			? {
-					hardenedRuntime: true,
-					...(channel.provisioningProfile ? {provisioningProfile: channel.provisioningProfile} : {}),
-					entitlements: channel.macEntitlements,
-					entitlementsInherit: 'build_resources/entitlements.mac.inherit.plist',
-				}
-			: {
-					// Ad-hoc signature so the app launches on Apple Silicon without a developer certificate.
-					identity: '-',
 					hardenedRuntime: false,
 					entitlements: 'build_resources/entitlements.mac.adhoc.plist',
 					entitlementsInherit: 'build_resources/entitlements.mac.adhoc.plist',
-				},
+				}
+			: macSigningEnabled
+				? {
+						hardenedRuntime: true,
+						...(channel.provisioningProfile ? {provisioningProfile: channel.provisioningProfile} : {}),
+						entitlements: channel.macEntitlements,
+						entitlementsInherit: 'build_resources/entitlements.mac.inherit.plist',
+					}
+				: {
+						// Ad-hoc signature so the app launches on Apple Silicon without a developer certificate.
+						identity: '-',
+						hardenedRuntime: false,
+						entitlements: 'build_resources/entitlements.mac.adhoc.plist',
+						entitlementsInherit: 'build_resources/entitlements.mac.adhoc.plist',
+					},
 		target: [
 			{
 				target: 'dmg',

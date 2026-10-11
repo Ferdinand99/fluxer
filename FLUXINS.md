@@ -82,6 +82,35 @@ are unavailable. To sign and notarise, add the secrets `CSC_LINK`, `CSC_KEY_PASS
 `CSC_KEYCHAIN` is set (`macSigningEnabled` in `electron-builder.config.cjs`). You also need your own
 provisioning profile and entitlements, and can then set `MAC_SELF_UPDATE_ENABLED` to true.
 
+Ad-hoc signing changes the code identity on every build, so macOS asks for camera, microphone and screen
+recording access again after each update. Without a Developer ID, build with a stable local identity
+instead (an "Apple Development" certificate from Xcode, or a self-signed code-signing certificate):
+
+```bash
+security find-identity -v -p codesigning   # pick the identity name
+cd fluxer_desktop
+MAC_LOCAL_SIGNING=true CSC_NAME="Apple Development: you@example.com (TEAMID)" \
+  pnpm exec electron-builder --config electron-builder.config.cjs --mac --arm64
+```
+
+To sign the GitHub release for everyone, export the identity (certificate and private key) as a `.p12`,
+store `base64 -i fluxins.p12` as the secret `CSC_LINK`, its password as `CSC_KEY_PASSWORD`, and set the
+repository variable `MAC_LOCAL_SIGNING` to `true`. The release workflow then imports it into a temporary
+keychain and signs the app with it. Every release must use the same certificate; the grants reset once
+when the certificate is replaced or expires.
+
+Without the build toolchain installed locally, re-sign the downloaded release instead. This signs it with the
+same identity and installs it into `/Applications`:
+
+```bash
+scripts/fluxins/resign-mac.sh ~/Downloads/Fluxins-<version>-mac-arm64.zip
+```
+
+`MAC_LOCAL_SIGNING=true` skips notarisation, the upstream provisioning profile and the restricted
+entitlements. Gatekeeper still warns on other machines, but grants survive updates as long as every release
+is signed with the same certificate. Run `tccutil reset All net.opland.fluxins` once after switching so
+the stale ad-hoc grants do not linger.
+
 ## Keeping up with upstream
 
 ```powershell
