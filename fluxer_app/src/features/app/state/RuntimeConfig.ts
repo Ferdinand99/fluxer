@@ -731,7 +731,11 @@ class RuntimeConfig {
 	}
 
 	isSelfHosted(): boolean {
-		return DeveloperOptions.selfHostedModeOverride || this.features.self_hosted;
+		if (DeveloperOptions.selfHostedModeOverride) {
+			return true;
+		}
+		const snapshot = this.activeRuntime?.snapshot ?? this.retainedSnapshot;
+		return snapshot?.features.self_hosted ?? false;
 	}
 
 	get premiumEnabled(): boolean {
