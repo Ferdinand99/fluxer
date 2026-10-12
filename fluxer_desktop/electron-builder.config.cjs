@@ -61,6 +61,9 @@ const macSigningEnabled = Boolean(process.env.CSC_LINK || process.env.CSC_NAME |
 // camera, microphone and screen recording grants, but it cannot be notarised and cannot use the upstream
 // provisioning profile or restricted entitlements, so those are skipped.
 const macLocalSigning = macSigningEnabled && process.env.MAC_LOCAL_SIGNING === 'true';
+// MAC_NO_PROVISIONING_PROFILE=true signs with a Developer ID certificate (and notarises) but without the
+// upstream provisioning profile and its restricted entitlements, which belong to upstream's team and bundle ID.
+const macNoProvisioningProfile = macSigningEnabled && process.env.MAC_NO_PROVISIONING_PROFILE === 'true';
 const buildChannel = process.env.BUILD_CHANNEL || 'stable';
 const channel = CHANNELS[buildChannel];
 
@@ -1756,9 +1759,15 @@ module.exports = {
 			: macSigningEnabled
 				? {
 						hardenedRuntime: true,
-						...(channel.provisioningProfile ? {provisioningProfile: channel.provisioningProfile} : {}),
-						entitlements: channel.macEntitlements,
-						entitlementsInherit: 'build_resources/entitlements.mac.inherit.plist',
+						...(channel.provisioningProfile && !macNoProvisioningProfile
+							? {provisioningProfile: channel.provisioningProfile}
+							: {}),
+						entitlements: macNoProvisioningProfile
+							? 'build_resources/entitlements.mac.developerid.plist'
+							: channel.macEntitlements,
+						entitlementsInherit: macNoProvisioningProfile
+							? 'build_resources/entitlements.mac.developerid.plist'
+							: 'build_resources/entitlements.mac.inherit.plist',
 					}
 				: {
 						// Ad-hoc signature so the app launches on Apple Silicon without a developer certificate.

@@ -83,6 +83,13 @@ are unavailable. To sign and notarise, add the secrets `CSC_LINK`, `CSC_KEY_PASS
 `CSC_KEYCHAIN` is set (`macSigningEnabled` in `electron-builder.config.cjs`). You also need your own
 provisioning profile and entitlements, and can then set `MAC_SELF_UPDATE_ENABLED` to true.
 
+With a Developer ID Application certificate, set `CSC_LINK` (base64 `.p12`), `CSC_KEY_PASSWORD`, `APPLE_API_KEY`
+(the full contents of the `.p8` file), `APPLE_API_KEY_ID` and `APPLE_API_ISSUER` as secrets, set the repository
+variable `MAC_NO_PROVISIONING_PROFILE` to `true` and remove `MAC_LOCAL_SIGNING`. The build is then signed with the
+hardened runtime and notarised, without upstream's provisioning profile and restricted entitlements
+(`entitlements.mac.developerid.plist`). Installed copies signed with a different identity cannot update to it
+in place, so the first Developer ID release has to be installed manually.
+
 Ad-hoc signing changes the code identity on every build, so macOS asks for camera, microphone and screen
 recording access again after each update. Without a Developer ID, build with a stable local identity
 instead (an "Apple Development" certificate from Xcode, or a self-signed code-signing certificate):

@@ -348,12 +348,20 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           # Set the repository variable MAC_LOCAL_SIGNING to true when CSC_LINK is not a Developer ID certificate.
           MAC_LOCAL_SIGNING: ${{ vars.MAC_LOCAL_SIGNING }}
+          # Set the repository variable MAC_NO_PROVISIONING_PROFILE to true for a Developer ID certificate: it signs
+          # and notarises without upstream's provisioning profile and restricted entitlements.
+          MAC_NO_PROVISIONING_PROFILE: ${{ vars.MAC_NO_PROVISIONING_PROFILE }}
         run: |
           # A missing secret becomes an empty string, and electron-builder treats an empty
           # CSC_LINK as a certificate path ("... not a file"). Unset the empty ones.
           for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER; do
             if [ -z "${!name}" ]; then unset "$name"; fi
           done
+          # electron-builder reads APPLE_API_KEY as the path of the .p8 file, but the secret holds its contents.
+          if [ -n "${APPLE_API_KEY:-}" ]; then
+            printf '%s\n' "$APPLE_API_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+            export APPLE_API_KEY="$RUNNER_TEMP/AuthKey.p8"
+          fi
           if [ -z "${CSC_LINK:-}" ]; then
             echo "No signing certificate configured: building an ad-hoc signed, unnotarised app."
           elif [ "${MAC_LOCAL_SIGNING:-}" = "true" ]; then
