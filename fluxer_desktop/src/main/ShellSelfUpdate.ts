@@ -13,7 +13,6 @@ import {relaunchStableLaunchPath} from '@electron/main/LinuxLaunchPath';
 import {moduleNetworkFetch} from '@electron/main/ModuleNetworkFetch';
 import {compareShellVersions} from '@electron/main/ModuleVersion';
 import {getUpdateBaseUrl, VELOPACK_UPDATE_SOURCE} from '@electron/main/ShellDownloadFormats';
-
 import type {ShellUpdateCapability, ShellUpdatePlan} from '@electron/main/ShellUpdateCapability';
 import {
 	clearVelopackApplyAttempt,
