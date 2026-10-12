@@ -163,6 +163,7 @@ const NAMED_FLUXER_ENV_OVERRIDES: Record<string, NamedEnvOverride> = {
 	FLUXER_EMAIL_SMTP_PORT: {path: ['integrations', 'email', 'smtp', 'port'], parse: parseInteger},
 	FLUXER_EMAIL_SMTP_USERNAME: {path: ['integrations', 'email', 'smtp', 'username']},
 	FLUXER_EMAIL_SMTP_PASSWORD: {path: ['integrations', 'email', 'smtp', 'password']},
+	FLUXER_EMAIL_SMTP_TLS_MODE: {path: ['integrations', 'email', 'smtp', 'tls_mode'], parse: parseSmtpTlsMode},
 	FLUXER_EMAIL_SMTP_SECURE: {path: ['integrations', 'email', 'smtp', 'secure'], parse: parseBoolean},
 	FLUXER_LIVEKIT_ENABLED: {path: ['integrations', 'voice', 'enabled'], parse: parseBoolean},
 	FLUXER_LIVEKIT_API_KEY: {path: ['integrations', 'voice', 'api_key']},
@@ -287,6 +288,7 @@ const NAMED_FLUXER_ENV_OVERRIDES: Record<string, NamedEnvOverride> = {
 	FLUXER_APP_STATUS_PAGE_URL: {path: ['instance', 'branding', 'status_page_url']},
 	FLUXER_APP_STATUS_PAGE_INCIDENT_HISTORY_URL: {path: ['instance', 'branding', 'status_page_incident_history_url']},
 	FLUXER_INSTANCE_SETUP_CONFIGURED: {path: ['instance', 'setup', 'configured'], parse: parseBoolean},
+	FLUXER_SETUP_TOKEN: {path: ['instance', 'setup', 'token']},
 	FLUXER_ACCOUNT_IDENTITY: {path: ['instance', 'account_identity'], parse: parseAccountIdentity},
 	FLUXER_TAG_STYLE: {path: ['instance', 'tag_style'], parse: parseTagStyle},
 	FLUXER_DISCOVERY_ENABLED: {path: ['discovery', 'enabled'], parse: parseBoolean},
@@ -348,6 +350,12 @@ function parseTagStyle(raw: string): string {
 	const value = raw.trim().toLowerCase();
 	if (value === 'none' || value === 'random') return value;
 	throw new Error('must be none or random');
+}
+
+function parseSmtpTlsMode(raw: string): string {
+	const value = raw.trim().toLowerCase();
+	if (value === 'implicit' || value === 'starttls' || value === 'opportunistic' || value === 'none') return value;
+	throw new Error('must be implicit, starttls, opportunistic or none');
 }
 
 function parseJson(raw: string): unknown {
