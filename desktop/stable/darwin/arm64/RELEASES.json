@@ -1,0 +1,15 @@
+{
+  "currentRelease": "2026.1015.162717",
+  "releases": [
+    {
+      "version": "2026.1015.162717",
+      "updateTo": {
+        "version": "2026.1015.162717",
+        "pub_date": "2026-10-15T16:27:17Z",
+        "notes": "",
+        "name": "2026.1015.162717",
+        "url": "https://github.com/Ferdinand99/fluxer/releases/download/fluxins-v2026.1015.162717/Fluxins-2026.1015.162717-mac-arm64.zip"
+      }
+    }
+  ]
+}
