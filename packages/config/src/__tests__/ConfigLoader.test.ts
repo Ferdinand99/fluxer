@@ -80,6 +80,29 @@ describe('ConfigLoader', () => {
 		expect((await loadConfig()).domain.base_domain).toBe('localhost');
 	});
 
+	test('a self-hosted instance without FLUXER_ENV runs in production', async () => {
+		stubMinimalEnv({
+			FLUXER_SELF_HOSTED: 'true',
+			FLUXER_PROFILE_PSEUDONYM_SECRET: 'self-hosted-secret',
+			FLUXER_POSTGRES_HOST: 'postgres',
+			FLUXER_POSTGRES_DATABASE: 'fluxer',
+			FLUXER_POSTGRES_PASSWORD: 'self-hosted-password',
+		});
+		vi.stubEnv('FLUXER_ENV', undefined);
+		expect((await loadConfig()).env).toBe('production');
+	});
+
+	test('a self-hosted instance keeps an explicit FLUXER_ENV', async () => {
+		stubMinimalEnv({FLUXER_SELF_HOSTED: 'true', FLUXER_ENV: 'development'});
+		expect((await loadConfig()).env).toBe('development');
+	});
+
+	test('an instance that is not self-hosted still defaults to development', async () => {
+		stubMinimalEnv();
+		vi.stubEnv('FLUXER_ENV', undefined);
+		expect((await loadConfig()).env).toBe('development');
+	});
+
 	test('endpoint overrides take precedence over derived endpoints', async () => {
 		stubMinimalEnv({
 			FLUXER_API_ENDPOINT: 'https://custom-api.example.com',
@@ -603,6 +626,46 @@ describe('ConfigLoader', () => {
 		}
 	});
 
+	test('rejects the controller cache purge adapter without an endpoint', async () => {
+		stubMinimalEnv({FLUXER_CACHE_PURGE_ADAPTER: 'controller'});
+		await expect(loadConfig()).rejects.toThrow('FLUXER_CACHE_PURGE_CONTROLLER_ENDPOINT is required');
+	});
+
+	test('rejects a controller cache purge endpoint that is not https', async () => {
+		stubMinimalEnv({
+			FLUXER_CACHE_PURGE_ADAPTER: 'controller',
+			FLUXER_CACHE_PURGE_CONTROLLER_ENDPOINT: 'http://controller.test/v1/orgs/a/sites/b/purge',
+			FLUXER_CACHE_PURGE_CONTROLLER_TOKEN: 'pak_test',
+		});
+		await expect(loadConfig()).rejects.toThrow(
+			'FLUXER_CACHE_PURGE_CONTROLLER_ENDPOINT must be an absolute https URL without credentials',
+		);
+	});
+
+	test('rejects the controller cache purge adapter without a token', async () => {
+		stubMinimalEnv({
+			FLUXER_CACHE_PURGE_ADAPTER: 'controller',
+			FLUXER_CACHE_PURGE_CONTROLLER_ENDPOINT: 'https://controller.test/v1/orgs/a/sites/b/purge',
+		});
+		await expect(loadConfig()).rejects.toThrow('FLUXER_CACHE_PURGE_CONTROLLER_TOKEN is required');
+	});
+
+	test('accepts a complete controller cache purge configuration', async () => {
+		stubMinimalEnv({
+			FLUXER_CACHE_PURGE_ADAPTER: 'controller',
+			FLUXER_CACHE_PURGE_CONTROLLER_ENDPOINT: 'https://controller.test/v1/orgs/a/sites/b/purge',
+			FLUXER_CACHE_PURGE_CONTROLLER_TOKEN: 'pak_test',
+			FLUXER_CACHE_PURGE_CONTROLLER_TIMEOUT_MS: '5000',
+		});
+		const cachePurge = (await loadConfig()).integrations.cache_purge;
+		expect(cachePurge.adapter).toBe('controller');
+		expect(cachePurge.controller).toEqual({
+			endpoint: 'https://controller.test/v1/orgs/a/sites/b/purge',
+			token: 'pak_test',
+			timeout_ms: 5000,
+		});
+	});
+
 	test('leaves the cache purge settings unvalidated when the adapter is none', async () => {
 		stubMinimalEnv({
 			FLUXER_CACHE_PURGE_HTTP_ENDPOINT: 'ftp://purge.internal/purge',
@@ -718,42 +781,22 @@ describe('report retention settings', () => {
 		vi.unstubAllEnvs();
 	});
 
-	test('deletes reports for real after 365 days with no resolved-report rule by default', async () => {
+	test('deletes resolved reports for real after 365 days by default', async () => {
 		stubMinimalEnv();
 		const config = await loadConfig();
-		expect(config.report_retention).toEqual({days: 365, resolved_days: null, dry_run: false});
+		expect(config.report_retention).toEqual({days: 365, dry_run: false});
 	});
 
-	test('reads both day settings and the dry run switch from the environment', async () => {
-		stubMinimalEnv({
-			FLUXER_REPORT_RETENTION_DAYS: '730',
-			FLUXER_RESOLVED_REPORT_RETENTION_DAYS: ' 90 ',
-			FLUXER_REPORT_RETENTION_DRY_RUN: 'TRUE',
-		});
+	test('reads the day setting and the dry run switch from the environment', async () => {
+		stubMinimalEnv({FLUXER_REPORT_RETENTION_DAYS: ' 730 ', FLUXER_REPORT_RETENTION_DRY_RUN: 'TRUE'});
 		const config = await loadConfig();
-		expect(config.report_retention).toEqual({days: 730, resolved_days: 90, dry_run: true});
-	});
-
-	test('an empty resolved-report setting leaves the rule off', async () => {
-		stubMinimalEnv({FLUXER_RESOLVED_REPORT_RETENTION_DAYS: '', FLUXER_REPORT_RETENTION_DRY_RUN: 'false'});
-		const config = await loadConfig();
-		expect(config.report_retention).toEqual({days: 365, resolved_days: null, dry_run: false});
+		expect(config.report_retention).toEqual({days: 730, dry_run: true});
 	});
 
 	test.each([
 		['FLUXER_REPORT_RETENTION_DAYS', '0', 'FLUXER_REPORT_RETENTION_DAYS must be an integer between 1 and 36500'],
 		['FLUXER_REPORT_RETENTION_DAYS', '36501', 'FLUXER_REPORT_RETENTION_DAYS must be an integer between 1 and 36500'],
 		['FLUXER_REPORT_RETENTION_DAYS', '1.5', 'FLUXER_REPORT_RETENTION_DAYS must be an integer, got "1.5"'],
-		[
-			'FLUXER_RESOLVED_REPORT_RETENTION_DAYS',
-			'0',
-			'FLUXER_RESOLVED_REPORT_RETENTION_DAYS must be an integer between 1 and 36500',
-		],
-		[
-			'FLUXER_RESOLVED_REPORT_RETENTION_DAYS',
-			'-30',
-			'FLUXER_RESOLVED_REPORT_RETENTION_DAYS must be an integer between 1 and 36500',
-		],
 		['FLUXER_REPORT_RETENTION_DRY_RUN', '1', 'FLUXER_REPORT_RETENTION_DRY_RUN must be true or false'],
 	])('refuses %s=%j', async (name, value, message) => {
 		stubMinimalEnv({[name]: value});

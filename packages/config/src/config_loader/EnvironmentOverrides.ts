@@ -239,6 +239,12 @@ const NAMED_FLUXER_ENV_OVERRIDES: Record<string, NamedEnvOverride> = {
 		path: ['integrations', 'cache_purge', 'http', 'timeout_ms'],
 		parse: parseInteger,
 	},
+	FLUXER_CACHE_PURGE_CONTROLLER_ENDPOINT: {path: ['integrations', 'cache_purge', 'controller', 'endpoint']},
+	FLUXER_CACHE_PURGE_CONTROLLER_TOKEN: {path: ['integrations', 'cache_purge', 'controller', 'token']},
+	FLUXER_CACHE_PURGE_CONTROLLER_TIMEOUT_MS: {
+		path: ['integrations', 'cache_purge', 'controller', 'timeout_ms'],
+		parse: parseInteger,
+	},
 	FLUXER_BLOCKLIST_FEEDS_ENABLED: {path: ['integrations', 'blocklist_feeds', 'enabled'], parse: parseBoolean},
 	FLUXER_BREACHED_PASSWORD_CHECK_ENABLED: {
 		path: ['integrations', 'breached_password_check', 'enabled'],
@@ -295,7 +301,6 @@ const NAMED_FLUXER_ENV_OVERRIDES: Record<string, NamedEnvOverride> = {
 	FLUXER_DISCOVERY_MIN_MEMBER_COUNT: {path: ['discovery', 'min_member_count'], parse: parseInteger},
 	FLUXER_DELETION_GRACE_PERIOD_HOURS: {path: ['deletion_grace_period_hours'], parse: parseInteger},
 	FLUXER_REPORT_RETENTION_DAYS: {path: ['report_retention', 'days'], parse: parseInteger},
-	FLUXER_RESOLVED_REPORT_RETENTION_DAYS: {path: ['report_retention', 'resolved_days'], parse: parseInteger},
 	FLUXER_REPORT_RETENTION_DRY_RUN: {path: ['report_retention', 'dry_run'], parse: parseBoolean},
 	FLUXER_RELAX_REGISTRATION_RATE_LIMITS: {path: ['dev', 'relax_registration_rate_limits'], parse: parseBoolean},
 	FLUXER_DISABLE_RATE_LIMITS: {path: ['dev', 'disable_rate_limits'], parse: parseBoolean},
