@@ -19,13 +19,16 @@ export interface TrustedCallerConfig {
 	buckets: Array<string>;
 }
 
+interface APICachePurgeTarget {
+	endpoint: string;
+	token: string;
+	timeoutMs: number;
+}
+
 export interface APICachePurgeConfig {
 	adapter: CachePurgeAdapterName;
-	http: {
-		endpoint: string;
-		token: string;
-		timeoutMs: number;
-	};
+	http: APICachePurgeTarget;
+	controller: APICachePurgeTarget;
 }
 
 interface APIGeoipFilesystemConfig {
@@ -305,7 +308,6 @@ export interface APIConfig {
 	deletionGracePeriodHours: number;
 	reportRetention: {
 		days: number;
-		resolvedDays: number | null;
 		dryRun: boolean;
 	};
 	inactivityDeletionThresholdDays?: number;

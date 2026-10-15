@@ -374,6 +374,11 @@ export function buildAPIConfigFromMaster(master: MasterConfig): APIConfig {
 				token: master.integrations.cache_purge.http.token,
 				timeoutMs: master.integrations.cache_purge.http.timeout_ms,
 			},
+			controller: {
+				endpoint: master.integrations.cache_purge.controller.endpoint,
+				token: master.integrations.cache_purge.controller.token,
+				timeoutMs: master.integrations.cache_purge.controller.timeout_ms,
+			},
 		},
 		clamav: {
 			enabled: master.integrations.clamav.enabled,
@@ -444,7 +449,6 @@ export function buildAPIConfigFromMaster(master: MasterConfig): APIConfig {
 		inactivityDeletionThresholdDays: master.inactivity_deletion_threshold_days,
 		reportRetention: {
 			days: master.report_retention.days,
-			resolvedDays: master.report_retention.resolved_days,
 			dryRun: master.report_retention.dry_run,
 		},
 		push: {
