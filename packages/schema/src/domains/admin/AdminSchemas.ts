@@ -12,6 +12,7 @@ import {ValidationErrorCodes} from '@fluxer/constants/src/ValidationErrorCodes';
 import {ADMIN_ACL_COUNT, AdminAclType} from '@fluxer/schema/src/domains/admin/AdminAclType';
 import {AdminArchiveResponseSchema} from '@fluxer/schema/src/domains/admin/AdminArchiveSchemas';
 import {GuildAdminResponse} from '@fluxer/schema/src/domains/admin/AdminGuildSchemas';
+import {ReportNoteResponse} from '@fluxer/schema/src/domains/admin/AdminReportNoteSchemas';
 import {UserAdminResponseSchema} from '@fluxer/schema/src/domains/admin/AdminUserSchemas';
 import {CaptchaConfigResponse, CaptchaConfigUpdateRequest} from '@fluxer/schema/src/domains/admin/CaptchaSchemas';
 import {
@@ -249,6 +250,7 @@ const ReportResolutionEnum = createNamedStringLiteralUnion(
 const ReportItemOutcomeEnum = createNamedStringLiteralUnion(
 	[
 		['removed', 'removed', 'The reported content, profile field or community was removed'],
+		['warned', 'warned', 'The account responsible for the reported item was warned'],
 		['restricted', 'restricted', 'The reported account was restricted and the content was left up'],
 		['action_taken', 'action_taken', 'Action was taken under the rules, and the reporter is not told which'],
 		['no_violation', 'no_violation', 'The reported content or account does not break the rules and was left as it is'],
@@ -949,14 +951,12 @@ const LimitRuleSchema = z.object({
 	filters: LimitFilterSchema.optional().describe('Optional filters that scope the rule'),
 	limits: z
 		.record(z.string(), NonNegativeSafeIntegerType)
-		.refine(
-			(limits) => {
-				const limitKeys = Object.keys(limits);
-				return limitKeys.every((key) => (LIMIT_KEYS as ReadonlyArray<string>).includes(key));
-			},
-			{error: 'Invalid limit key detected'},
-		)
 		.superRefine((limits, ctx) => {
+			for (const key of Object.keys(limits)) {
+				if (!(LIMIT_KEYS as ReadonlyArray<string>).includes(key)) {
+					ctx.addIssue({code: 'custom', message: ValidationErrorCodes.INVALID_FORMAT, path: [key]});
+				}
+			}
 			for (const key of LIMIT_KEYS) {
 				const value = limits[key];
 				const {min = 0, max} = LIMIT_KEY_METADATA[key];
@@ -1671,6 +1671,10 @@ export const ReportAdminResponseSchema = z.object({
 		.nullable()
 		.optional()
 		.describe('Why the report is held. Returned by the report detail only. Null when the report has no hold.'),
+	notes: z
+		.array(ReportNoteResponse)
+		.optional()
+		.describe('Internal staff notes on the report, oldest first. Returned by the report detail only.'),
 	reason: z.string().nullable().optional(),
 	reason_label: z.string().nullable().optional(),
 	reason_highest_priority: z.boolean().nullable().optional(),

@@ -41,6 +41,8 @@ use crate::{
             },
             resource_link::{ResourceType, resource_link},
             section_card::section_card,
+            staff_notes::{StaffNote, StaffNoteForm, staff_notes_section},
+            user_display::user_link,
         },
         layout::admin_layout,
     },
@@ -601,13 +603,14 @@ fn resolve_report_form(base: &str, report_id: &str, csrf_token: &str) -> Markup 
                         class={(FORM_CONTROL_CLASS) " h-8 appearance-none px-3 py-1.5 pr-10"} {
                         option value="" selected disabled { "Choose one" }
                         option value="removed" { "Content removed" }
+                        option value="warned" { "Warning given" }
                         option value="restricted" { "Account restricted" }
                         option value="action_taken" { "Other action taken" }
                     }
                     (select_chevron())
                 }
                 p class="text-neutral-500 text-xs" {
-                    "What happened to the reported content or account. The reporter is told it. Other action taken, such as a warning, tells them we acted but not how."
+                    "What happened to the reported content or account. The reporter is told it. Warning given and other action taken tell them we acted but not how."
                 }
             }
             fieldset class="flex flex-col gap-3" data-show-for-resolution="duplicate" hidden disabled {
@@ -943,6 +946,36 @@ fn snapshot_guild_group(
     }
 }
 
+fn notes_card(
+    config: &AdminConfig,
+    auth: &AuthContext,
+    report: &ReportEntry,
+    note_authors: &[AdminUser],
+    csrf_token: &str,
+) -> Markup {
+    let base = &config.base_path;
+    let notes: Vec<StaffNote> = report
+        .notes
+        .iter()
+        .map(|note| StaffNote {
+            note_id: &note.note_id,
+            author: user_link(base, note_authors, &note.author_id),
+            body: &note.body,
+            created_at: &note.created_at,
+        })
+        .collect();
+    staff_notes_section(
+        &notes,
+        has_acl(auth, acl::REPORT_RESOLVE).then(|| StaffNoteForm {
+            action: format!("{base}/reports/{}/notes", report.report_id),
+            refresh_target: "#report-detail",
+            field_id: format!("note-{}", report.report_id),
+            help: "Staff only. Never shown to the reporter or the reported account. Notes cannot be changed and are deleted with the report.",
+            csrf_token,
+        }),
+    )
+}
+
 fn legal_hold_card(
     config: &AdminConfig,
     auth: &AuthContext,
@@ -1040,7 +1073,7 @@ fn delete_report_card(
         (section_card(Some("Delete Report"), None, None, html! {
             div class="flex flex-col gap-3" data-report-delete=(if held { "held" } else { "available" }) {
                 p class="text-neutral-500 text-sm" {
-                    "Deletes the report now, with its message context, profile snapshot, stored evidence and search entry. \
+                    "Deletes the report now, with its message context, profile snapshot, notes, stored evidence and search entry. \
                      Evidence that another report uses is kept. This cannot be undone."
                 }
                 @if held {
@@ -1128,6 +1161,7 @@ pub fn report_detail_page(
     auth: &AuthContext,
     report: &ReportEntry,
     live: &LiveProfile,
+    note_authors: &[AdminUser],
     csrf_token: &str,
     is_htmx: bool,
 ) -> Markup {
@@ -1148,6 +1182,7 @@ pub fn report_detail_page(
                 (profile_snapshot_section(config, report, live))
                 (message_context_section(config, report, can_take_action(admin_acls(auth))))
                 (additional_info_section(report))
+                (notes_card(config, auth, report, note_authors, csrf_token))
             }
             div class="space-y-6" {
                 (status_card(config, report))
