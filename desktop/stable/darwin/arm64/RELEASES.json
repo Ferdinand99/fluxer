@@ -1,0 +1,15 @@
+{
+  "currentRelease": "2026.1022.224214",
+  "releases": [
+    {
+      "version": "2026.1022.224214",
+      "updateTo": {
+        "version": "2026.1022.224214",
+        "pub_date": "2026-10-22T22:42:14Z",
+        "notes": "",
+        "name": "2026.1022.224214",
+        "url": "https://github.com/Ferdinand99/fluxer/releases/download/fluxins-v2026.1022.224214/Fluxins-2026.1022.224214-mac-arm64.zip"
+      }
+    }
+  ]
+}
