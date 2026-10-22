@@ -12000,6 +12000,11 @@ msgstr "Smazat vaše zprávy v této komunitě?"
 msgid "Delete your messages in this conversation?"
 msgstr "Smazat vaše zprávy v této konverzaci?"
 
+#. Confirmation modal title for the destructive "delete all my messages in this thread" action. Also shown for forum and media posts.
+#: src/features/channel/hooks/useDeleteMyMessagesInChannel.tsx
+msgid "Delete your messages in this thread?"
+msgstr "Smazat zprávy v tomto vlákně?"
+
 #. Activity log detail line under a ban, shown when the ban also deleted the messages the banned user sent shortly before it. This matches the "Delete message history" choice in the ban dialog. "The member" is the banned user, a single person. {duration} is how far back from the ban the messages were deleted, shown as a full duration phrase such as "1 hour" or "7 days". The number and unit change at runtime, so do not put an article, adjective or case ending next to {duration} that has to agree with it. It continues the entry summary, so it has no subject. It is a past tense record of a change the actor in the summary already made, never an instruction to the reader. Do not write it as a command, a button label or in first or second person.
 #: src/features/guild/utils/guild_tabs/audit_log/AuditLogMemberMessages.ts
 msgid "Deleted {duration} of the member's recent message history"
@@ -17220,15 +17225,15 @@ msgstr "HEVC"
 msgid "Hex value for {tokenLabel}"
 msgstr "Hexadecimální hodnota pro {tokenLabel}"
 
+#. Nagbar warning shown when the current user still needs to verify email. A verification email is sent when the account is created. displayName is the user display name.
+#: src/features/app/components/layout/app_layout/nagbars/EmailVerificationNagbar.tsx
+msgid "Hey {displayName}, check your inbox for the email we sent to verify your address."
+msgstr "Ahoj {displayName}, zkontroluj si schránku, poslal(a) jsme ti e-mail k ověření adresy."
+
 #. Nagbar warning shown to unclaimed-account users. displayName is the current user display name.
 #: src/features/app/components/layout/app_layout/nagbars/UnclaimedAccountNagbar.tsx
 msgid "Hey {displayName}, claim your account to prevent losing access."
 msgstr "Zdravíme, {displayName}! Dokončete registraci svého účtu, abyste k němu neztratili přístup."
-
-#. Nagbar warning shown when the current user still needs to verify email. displayName is the user display name.
-#: src/features/app/components/layout/app_layout/nagbars/EmailVerificationNagbar.tsx
-msgid "Hey {displayName}, please verify your email address."
-msgstr "Zdravíme, {displayName}! Ověřte prosím svou e-mailovou adresu."
 
 #. Nagbar warning shown when emails to the current user address bounce, so the address cannot be verified. displayName is the user display name.
 #: src/features/app/components/layout/app_layout/nagbars/EmailVerificationNagbar.tsx
@@ -20717,12 +20722,6 @@ msgstr "Měření…"
 msgid "Media"
 msgstr "Média"
 
-#. Chat settings section for image, video, embed, and media preferences.
-#: src/features/user/components/settings_utils/section_registry/ChatSettingsSections.ts
-msgctxt "chat-settings-section"
-msgid "Media"
-msgstr "Média"
-
 #. Settings search synonym. Used to match this term when the user types it in the settings search bar.
 #: src/features/user/components/settings_utils/search_index/ChatSettingsIndex.ts
 msgid "Media attachment buttons"
@@ -20799,11 +20798,6 @@ msgstr "Předchozí skladba"
 #: src/features/voice/components/media_player/components/MediaProgressBar.tsx
 msgid "Media progress"
 msgstr "Průběh přehrávání média"
-
-#. Settings search synonym. Used to match this term when the user types it in the settings search bar.
-#: src/features/user/components/settings_utils/section_registry/ChatSettingsSections.ts
-msgid "Media size"
-msgstr "Velikost médií"
 
 #: src/features/input/utils/KeybindUtils.ts
 msgctxt "keyboard-key-name"
@@ -27910,12 +27904,15 @@ msgstr "Znovu odeslat ({secondsRemaining} s)"
 msgid "Resend code"
 msgstr "Znovu odeslat kód"
 
-#. Button label that sends another verification email after one was already sent. Keep it concise.
 #: src/features/app/components/dialogs/components/EmailVerificationAlert.tsx
 #: src/features/auth/flow/IpAuthorizationScreen.tsx
-#: src/features/auth/hooks/useVerifyEmailAction.tsx
 msgid "Resend email"
 msgstr "Znovu odeslat e-mail"
+
+#. Button label on prompts that ask the user to verify their email, such as the add friend form. A verification email was already sent when the account was created, so this sends another one. Keep it concise.
+#: src/features/auth/hooks/useVerifyEmailAction.tsx
+msgid "Resend verification email"
+msgstr "Znovu odeslat ověřovací email"
 
 #: src/features/auth/flow/IpAuthorizationScreen.tsx
 msgid "Resent"
@@ -29940,11 +29937,6 @@ msgstr "Odesílat zprávy převodem textu na řeč"
 #: src/features/moderation/components/report/ReportStepEmail.tsx
 msgid "Send verification code"
 msgstr "Odeslat ověřovací kód"
-
-#. Button label on prompts that ask the user to verify their email, such as the add friend form. Sends a verification email right away. Keep it concise.
-#: src/features/auth/hooks/useVerifyEmailAction.tsx
-msgid "Send verification email"
-msgstr "Odeslat ověřovací e-mail"
 
 #. Accessible label and tooltip for the send button after recording a voice message.
 #. Keyboard shortcut action label that opens the desktop voice message composer.
@@ -34956,6 +34948,11 @@ msgstr "Upozorníte tak <0>{memberCount, plural, one {# člena} few {# členy} m
 msgid "This will notify up to <0>{memberCount, plural, one {# online member} other {# online members}}</0> in this channel. Are you sure you want to do this?"
 msgstr "Upozorníte tak až <0>{memberCount, plural, one {# online člena} few {# online členy} many {# online člena} other {# online členů}}</0> v tomto kanálu. Opravdu to chcete udělat?"
 
+#. Confirmation modal description warning that every message the caller has sent in this channel and in all of its threads, active or archived, will be deleted. Also shown for forum and media channels, where the threads are their posts. Cannot be undone.
+#: src/features/channel/hooks/useDeleteMyMessagesInChannel.tsx
+msgid "This will permanently delete every message you have ever sent in this channel and its threads. This cannot be undone."
+msgstr "Tímto trvale smažete všechny zprávy, které jste kdy v tomto kanálu a jeho vláknech odeslali. To nelze vzít zpět."
+
 #. Confirmation modal description warning that every message the caller has sent in this channel will be deleted. Cannot be undone.
 #: src/features/channel/hooks/useDeleteMyMessagesInChannel.tsx
 msgid "This will permanently delete every message you have ever sent in this channel. This cannot be undone."
@@ -34965,6 +34962,11 @@ msgstr "Tímto trvale smažete všechny zprávy, které jste kdy odeslali v tomt
 #: src/features/channel/hooks/useDeleteMyMessagesInChannel.tsx
 msgid "This will permanently delete every message you have ever sent in this conversation. This cannot be undone."
 msgstr "Tímto trvale smažete všechny zprávy, které jste kdy odeslali v této konverzaci. Tuto akci nelze vrátit zpět."
+
+#. Confirmation modal description warning that every message the caller has sent in this thread will be deleted. Also shown for forum and media posts. Cannot be undone.
+#: src/features/channel/hooks/useDeleteMyMessagesInChannel.tsx
+msgid "This will permanently delete every message you have ever sent in this thread. This cannot be undone."
+msgstr "Tímto trvale smažete všechny zprávy, které jste kdy v tomto vlákně poslali. Nelze to vzít zpět."
 
 #: src/features/theme/components/modals/ThemeAcceptModal.tsx
 msgid "This will replace your current custom theme. You can edit it later in {themeSettingsPath}."
